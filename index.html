@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Mini ChatGPT</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f10;
+    --surface: #1a1a1c;
+    --surface-2: #232326;
+    --border: #2e2e32;
+    --text: #e8e8ea;
+    --text-dim: #9a9aa0;
+    --accent: #10a37f;
+    --user-bubble: #2b2b30;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    overscroll-behavior: none;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  /* Top bar */
+  #topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .icon-btn:active {
+    background: var(--surface-2);
+  }
+
+  #chatTitle {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 8px;
+  }
+
+  /* History panel */
+  #historyPanel {
+    display: none;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    max-height: 40vh;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  #historyPanel.open {
+    display: block;
+  }
+
+  .history-item {
+    padding: 12px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--surface-2);
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .history-item.active {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  /* Messages */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 10px;
+  }
+
+  #emptyState {
+    margin: auto;
+    color: var(--text-dim);
+    font-size: 14px;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .bubble {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 15px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .bubble.user {
+    align-self: flex-end;
+    background: var(--user-bubble);
+    border-bottom-right-radius: 4px;
+  }
+
+  .bubble.assistant {
+    align-self: flex-start;
+    background: var(--surface);
+    border-bottom-left-radius: 4px;
+  }
+
+  .typing {
+    align-self: flex-start;
+    display: flex;
+    gap: 4px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border-radius: 14px;
+    border-bottom-left-radius: 4px;
+    width: fit-content;
+  }
+
+  .typing span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    animation: blink 1.2s infinite ease-in-out;
+  }
+
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes blink {
+    0%, 80%, 100% { opacity: 0.3; }
+    40% { opacity: 1; }
+  }
+
+  #errorBanner {
+    display: none;
+    background: #3a1e1e;
+    color: #ff9b9b;
+    font-size: 13px;
+    padding: 8px 14px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  /* Input bar */
+  #inputBar {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--bg);
+  }
+
+  #messageInput {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 15px;
+    resize: none;
+    max-height: 120px;
+    font-family: inherit;
+  }
+
+  #messageInput:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  #sendBtn {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  #sendBtn:disabled {
+    opacity: 0.4;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="topbar">
+    <button class="icon-btn" id="historyBtn">☰</button>
+    <div id="chatTitle">New Chat</div>
+    <button class="icon-btn" id="newChatBtn">+ New</button>
+  </div>
+
+  <div id="historyPanel"></div>
+
+  <div id="errorBanner"></div>
+
+  <div id="messages">
+    <div id="emptyState">Ask me anything to get started.</div>
+  </div>
+
+  <div id="inputBar">
+    <textarea id="messageInput" rows="1" placeholder="Message Claude…"></textarea>
+    <button id="sendBtn">➤</button>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'mini-chatgpt-conversations';
+
+  let conversations = [];
+  let activeId = null;
+  let loading = false;
+
+  const messagesEl = document.getElementById('messages');
+  const historyPanel = document.getElementById('historyPanel');
+  const chatTitle = document.getElementById('chatTitle');
+  const errorBanner = document.getElementById('errorBanner');
+  const input = document.getElementById('messageInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const historyBtn = document.getElementById('historyBtn');
+  const newChatBtn = document.getElementById('newChatBtn');
+
+  function loadConversations() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveConversations() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+    } catch {}
+  }
+
+  function newConversation() {
+    return { id: Date.now().toString(), title: 'New Chat', messages: [] };
+  }
+
+  function getActive() {
+    return conversations.find(c => c.id === activeId);
+  }
+
+  function init() {
+    conversations = loadConversations();
+    if (conversations.length === 0) {
+      const c = newConversation();
+      conversations.push(c);
+    }
+    activeId = conversations[0].id;
+    render();
+  }
+
+  function render() {
+    const active = getActive();
+    chatTitle.textContent = active ? active.title : 'Mini ChatGPT';
+
+    // Messages
+    messagesEl.innerHTML = '';
+    if (!active || active.messages.length === 0) {
+      const empty = document.createElement('div');
+      empty.id = 'emptyState';
+      empty.textContent = 'Ask me anything to get started.';
+      messagesEl.appendChild(empty);
+    } else {
+      active.messages.forEach(m => {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble ' + (m.role === 'user' ? 'user' : 'assistant');
+        bubble.textContent = m.content;
+        messagesEl.appendChild(bubble);
+      });
+    }
+
+    if (loading) {
+      const typing = document.createElement('div');
+      typing.className = 'typing';
+      typing.innerHTML = '<span></span><span></span><span></span>';
+      messagesEl.appendChild(typing);
+    }
+
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    // History panel
+    historyPanel.innerHTML = '';
+    conversations.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'history-item' + (c.id === activeId ? ' active' : '');
+      item.textContent = c.title;
+      item.onclick = () => {
+        activeId = c.id;
+        historyPanel.classList.remove('open');
+        hideError();
+        render();
+      };
+      historyPanel.appendChild(item);
+    });
+
+    sendBtn.disabled = loading || !input.value.trim();
+  }
+
+  function showError(msg) {
+    errorBanner.textContent = msg;
+    errorBanner.style.display = 'block';
+  }
+
+  function hideError() {
+    errorBanner.style.display = 'none';
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || loading) return;
+
+    hideError();
+    const active = getActive();
+    const isFirst = active.messages.length === 0;
+
+    active.messages.push({ role: 'user', content: text });
+    if (isFirst) active.title = text.slice(0, 30);
+
+    input.value = '';
+    loading = true;
+    render();
+    saveConversations();
+
+    try {
+      // NOTE: /api/chat does not exist yet — backend will be connected next.
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: active.messages })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+
+      active.messages.push({ role: 'assistant', content: data.reply });
+    } catch (err) {
+      showError(err.message || 'Failed to reach the server (backend not connected yet).');
+    } finally {
+      loading = false;
+      saveConversations();
+      render();
+    }
+  }
+
+  newChatBtn.addEventListener('click', () => {
+    const c = newConversation();
+    conversations.unshift(c);
+    activeId = c.id;
+    historyPanel.classList.remove('open');
+    hideError();
+    saveConversations();
+    render();
+  });
+
+  historyBtn.addEventListener('click', () => {
+    historyPanel.classList.toggle('open');
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+
+  input.addEventListener('input', () => {
+    sendBtn.disabled = loading || !input.value.trim();
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  init();
+</script>
+
+</body>
+</html>
