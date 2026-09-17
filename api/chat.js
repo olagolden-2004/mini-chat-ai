@@ -1,17 +1,13 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({
-      error: 'Method not allowed'
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { messages } = req.body || {};
+    const { messages, systemInstruction } = req.body || {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({
-        error: 'Invalid messages'
-      });
+      return res.status(400).json({ error: 'Invalid messages' });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -30,21 +26,25 @@ export default async function handler(req, res) {
           m.content.trim() !== ''
       )
       .map((m) => ({
-        role:
-          m.role === 'assistant'
-            ? 'model'
-            : 'user',
-        parts: [
-          {
-            text: m.content
-          }
-        ]
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
       }));
 
-    if (contents.length === 0) {
+    if (!contents.length) {
       return res.status(400).json({
         error: 'No usable messages were provided'
       });
+    }
+
+    const body = { contents };
+
+    if (
+      typeof systemInstruction === 'string' &&
+      systemInstruction.trim()
+    ) {
+      body.systemInstruction = {
+        parts: [{ text: systemInstruction.slice(0, 12000) }]
+      };
     }
 
     const response = await fetch(
@@ -55,16 +55,13 @@ export default async function handler(req, res) {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          contents
-        })
+        body: JSON.stringify(body)
       }
     );
 
     const responseText = await response.text();
 
     let data;
-
     try {
       data = JSON.parse(responseText);
     } catch {
@@ -95,82 +92,55 @@ export default async function handler(req, res) {
       const blockReason =
         data?.promptFeedback?.blockReason;
 
-      let errorMessage =
-        'Gemini returned no text.';
+      let message = 'Gemini returned no text.';
 
       if (blockReason) {
-        errorMessage +=
-          ` Prompt blocked: ${blockReason}.`;
+        message += ` Prompt blocked: ${blockReason}.`;
       }
 
       if (finishReason) {
-        errorMessage +=
-          ` Finish reason: ${finishReason}.`;
+        message += ` Finish reason: ${finishReason}.`;
       }
 
-      return res.status(502).json({
-        error: errorMessage
-      });
+      return res.status(502).json({ error: message });
     }
 
     res.statusCode = 200;
-
     res.setHeader(
       'Content-Type',
       'text/event-stream; charset=utf-8'
     );
-
     res.setHeader(
       'Cache-Control',
       'no-cache, no-transform'
     );
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
 
-    res.setHeader(
-      'Connection',
-      'keep-alive'
-    );
-
-    res.setHeader(
-      'X-Accel-Buffering',
-      'no'
+    res.write(
+      `data: ${JSON.stringify({ text })}\n\n`
     );
 
     res.write(
-      `data: ${JSON.stringify({
-        text: text
-      })}\n\n`
-    );
-
-    res.write(
-      `data: ${JSON.stringify({
-        done: true
-      })}\n\n`
+      `data: ${JSON.stringify({ done: true })}\n\n`
     );
 
     res.end();
-
   } catch (error) {
-    console.error(
-      'Chat API error:',
-      error
-    );
+    console.error('Chat API error:', error);
 
     if (!res.headersSent) {
       return res.status(500).json({
-        error:
-          error?.message ||
-          'Server error'
+        error: error?.message || 'Server error'
       });
     }
 
     res.write(
       `data: ${JSON.stringify({
-        error:
-          error?.message ||
-          'Server error'
+        error: error?.message || 'Server error'
       })}\n\n`
     );
 
     res.end();
   }
-        }
+}
