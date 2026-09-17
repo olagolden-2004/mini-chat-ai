@@ -4,21 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Mini ChatGPT</title>
-<script>
-window.MathJax = {
-  tex: {
-    inlineMath: [['\\(', '\\)'], ['$', '$']],
-    displayMath: [['\\[', '\\]'], ['$$', '$$']]
-  },
-  options: {
-    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
-  },
-  startup: {
-    typeset: false
-  }
-};
-</script>
-<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 <style>
@@ -169,18 +155,52 @@ function saveSettings(s){localStorage.setItem(SETTINGS_KEY,JSON.stringify(s))}
 function showError(msg){errorBanner.textContent=msg;errorBanner.style.display='block'}
 function hideError(){errorBanner.style.display='none'}
 
-function renderMarkdown(text){
-  try{return DOMPurify.sanitize(marked.parse(text,{breaks:true,gfm:true}))}
-  catch{const d=document.createElement('div');d.textContent=text;return d.innerHTML.replace(/\n/g,'<br>')}
+function cleanMath(text){
+  let out = String(text || '');
+
+  // Convert common LaTeX-style math into clean plain text. This is intentional:
+  // the chat is mobile-first, so equations should remain readable everywhere.
+  out = out.replace(/\$\$([\s\S]*?)\$\$/g, '$1');
+  out = out.replace(/\\\[([\s\S]*?)\\\]/g, '$1');
+  out = out.replace(/\\\(([\s\S]*?)\\\)/g, '$1');
+  out = out.replace(/\$([^$\n]+)\$/g, '$1');
+
+  // Remove text/textbf wrappers, including the common simple cases.
+  for(let i=0;i<3;i++){
+    out = out.replace(/\\textbf\s*\{([^{}]*)\}/g, '$1');
+    out = out.replace(/\\text\s*\{([^{}]*)\}/g, '$1');
+    out = out.replace(/\\mathrm\s*\{([^{}]*)\}/g, '$1');
+  }
+
+  out = out
+    .replace(/\\times/g, ' × ')
+    .replace(/\\cdot/g, ' · ')
+    .replace(/\\div/g, ' ÷ ')
+    .replace(/\\pm/g, ' ± ')
+    .replace(/\\leq/g, ' ≤ ')
+    .replace(/\\geq/g, ' ≥ ')
+    .replace(/\\neq/g, ' ≠ ')
+    .replace(/\\%/g, '%')
+    .replace(/\\left/g, '')
+    .replace(/\\right/g, '')
+    .replace(/\\,/g, ' ')
+    .replace(/\\!/g, '')
+    .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1 ÷ $2)')
+    .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+    .replace(/\\[a-zA-Z]+/g, '')
+    .replace(/[{}]/g, '');
+
+  // Gemini occasionally emits doubled currency symbols around a formula.
+  out = out.replace(/₦{2,}/g, '₦');
+  out = out.replace(/[ \t]{2,}/g, ' ');
+  return out;
 }
 
-function typesetMath(container){
-  if(!container || !window.MathJax || !window.MathJax.typesetPromise) return;
-  requestAnimationFrame(()=>{
-    window.MathJax.typesetClear?.([container]);
-    window.MathJax.typesetPromise([container]).catch(()=>{});
-  });
+function renderMarkdown(text){
+  try{return DOMPurify.sanitize(marked.parse(cleanMath(text),{breaks:true,gfm:true}))}
+  catch{const d=document.createElement('div');d.textContent=cleanMath(text);return d.innerHTML.replace(/\n/g,'<br>')}
 }
+
 
 function copyText(text,btn,label='Copy'){
   if(navigator.clipboard) navigator.clipboard.writeText(text).catch(()=>{});
@@ -227,7 +247,7 @@ function render(){
         bubble.textContent=m.content;row.appendChild(bubble);
         if(m.attachmentName){const n=document.createElement('div');n.className='attachment-note';n.textContent='📎 '+m.attachmentName;row.appendChild(n)}
       }else{
-        bubble.innerHTML=renderMarkdown(m.content);enhanceCodeBlocks(bubble);typesetMath(bubble);row.appendChild(bubble);
+        bubble.innerHTML=renderMarkdown(m.content);enhanceCodeBlocks(bubble);row.appendChild(bubble);
         if(m.content)addResponseTools(row,m.content);
       }
       messagesEl.appendChild(row);
@@ -292,11 +312,19 @@ function downloadConversation(){
 
 function styleInstruction(){
   const s=getSettings().style;
-  if(s==='concise')return'Be concise. Give the useful answer directly and avoid unnecessary explanation.';
-  if(s==='detailed')return'Give detailed, well-structured explanations with examples when useful.';
-  if(s==='coding')return'Act as a practical coding assistant. Give complete, working code when code is requested and explain important changes briefly.';
-  if(s==='trading')return'Act as a careful trading education assistant. Explain risk management and trading concepts clearly. Do not present financial outcomes as guaranteed.';
-  return'Be a helpful, accurate general-purpose AI assistant. Explain things clearly and naturally.';
+  let style='Be a helpful, accurate general-purpose AI assistant. Explain things clearly and naturally.';
+  if(s==='concise')style='Be concise. Give the useful answer directly and avoid unnecessary explanation.';
+  if(s==='detailed')style='Give detailed, well-structured explanations with examples when useful.';
+  if(s==='coding')style='Act as a practical coding assistant. Give complete, working code when code is requested and explain important changes briefly.';
+  if(s==='trading')style='Act as a careful trading education assistant. Explain risk management and trading concepts clearly. Do not present financial outcomes as guaranteed.';
+  return style + `
+
+Important response rules:
+- Be mathematically accurate. Recheck calculations before answering.
+- When explaining calculations, use plain-text equations such as "₦1,500,000 × 0.01 = ₦15,000". Do NOT use LaTeX, $$...$$, \( ... \), or \[ ... \].
+- Do not claim that 100 consecutive 1% losses would reduce a compounding account to zero. If 1% is calculated from the current balance, explain that losses compound; if it is a fixed monetary risk, state that assumption explicitly.
+- For trading risk, distinguish the planned maximum loss at the stop-loss from the position size/lot size.
+- If the user asks for a factual calculation, show the calculation clearly and give the final number.`;
 }
 
 async function sendMessage(){
@@ -349,7 +377,7 @@ async function sendMessage(){
 function updateStreamingMessage(text){
   const rows=messagesEl.querySelectorAll('.message-row.assistant');if(!rows.length)return;
   const row=rows[rows.length-1],bubble=row.querySelector('.bubble.assistant');if(!bubble)return;
-  bubble.innerHTML=renderMarkdown(text);enhanceCodeBlocks(bubble);typesetMath(bubble);messagesEl.scrollTop=messagesEl.scrollHeight;
+  bubble.innerHTML=renderMarkdown(text);enhanceCodeBlocks(bubble);messagesEl.scrollTop=messagesEl.scrollHeight;
 }
 
 async function handleFile(file){
