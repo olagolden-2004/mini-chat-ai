@@ -22,10 +22,6 @@ export default async function handler(req, res) {
       });
     }
 
-    /*
-      Convert the chat messages into Gemini format.
-      Empty assistant messages are ignored.
-    */
     const contents = messages
       .filter(
         (m) =>
@@ -51,22 +47,14 @@ export default async function handler(req, res) {
       });
     }
 
-    /*
-      Use Gemini's normal generateContent endpoint.
-      This avoids manually parsing Gemini's streaming
-      response, while we still send an SSE response
-      to your existing frontend.
-    */
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' +
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=' +
         encodeURIComponent(apiKey),
       {
         method: 'POST',
-
         headers: {
           'Content-Type': 'application/json'
         },
-
         body: JSON.stringify({
           contents
         })
@@ -75,33 +63,24 @@ export default async function handler(req, res) {
 
     const responseText = await response.text();
 
-    let data = null;
+    let data;
 
     try {
       data = JSON.parse(responseText);
     } catch {
       return res.status(502).json({
-        error:
-          'Gemini returned an invalid response.'
+        error: 'Gemini returned an invalid response.'
       });
     }
 
-    /*
-      Handle Gemini API errors clearly.
-    */
     if (!response.ok) {
-      const apiError =
-        data?.error?.message ||
-        'Gemini API request failed.';
-
       return res.status(response.status).json({
-        error: apiError
+        error:
+          data?.error?.message ||
+          'Gemini API request failed.'
       });
     }
 
-    /*
-      Extract Gemini's answer.
-    */
     const parts =
       data?.candidates?.[0]?.content?.parts || [];
 
@@ -109,11 +88,6 @@ export default async function handler(req, res) {
       .map((part) => part?.text || '')
       .join('');
 
-    /*
-      If Gemini returned no text, give the frontend
-      a useful error instead of the vague
-      "empty response" message.
-    */
     if (!text.trim()) {
       const finishReason =
         data?.candidates?.[0]?.finishReason;
@@ -127,7 +101,9 @@ export default async function handler(req, res) {
       if (blockReason) {
         errorMessage +=
           ` Prompt blocked: ${blockReason}.`;
-      } else if (finishReason) {
+      }
+
+      if (finishReason) {
         errorMessage +=
           ` Finish reason: ${finishReason}.`;
       }
@@ -137,10 +113,6 @@ export default async function handler(req, res) {
       });
     }
 
-    /*
-      Send the answer using the exact SSE format
-      your current index.html expects.
-    */
     res.statusCode = 200;
 
     res.setHeader(
@@ -178,7 +150,10 @@ export default async function handler(req, res) {
     res.end();
 
   } catch (error) {
-    console.error('Chat API error:', error);
+    console.error(
+      'Chat API error:',
+      error
+    );
 
     if (!res.headersSent) {
       return res.status(500).json({
@@ -198,4 +173,4 @@ export default async function handler(req, res) {
 
     res.end();
   }
-            }
+        }
