@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     }
 
     const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent?alt=sse&key=' +
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=' +
         encodeURIComponent(apiKey),
       {
         method: 'POST',
@@ -59,65 +59,72 @@ export default async function handler(req, res) {
       }
     );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = 'Gemini API request failed.';
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData?.error?.message || errorMessage;
-      } catch {}
-      return res.status(response.status).json({ error: errorMessage });
+    const responseText = await response.text();
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      return res.status(502).json({
+        error: 'Gemini returned an invalid response.'
+      });
     }
 
-    if (!response.body) {
-      return res.status(502).json({ error: 'Gemini did not return a stream.' });
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error:
+          data?.error?.message ||
+          'Gemini API request failed.'
+      });
+    }
+
+    const parts =
+      data?.candidates?.[0]?.content?.parts || [];
+
+    const text = parts
+      .map((part) => part?.text || '')
+      .join('');
+
+    if (!text.trim()) {
+      const finishReason =
+        data?.candidates?.[0]?.finishReason;
+
+      const blockReason =
+        data?.promptFeedback?.blockReason;
+
+      let message = 'Gemini returned no text.';
+
+      if (blockReason) {
+        message += ` Prompt blocked: ${blockReason}.`;
+      }
+
+      if (finishReason) {
+        message += ` Finish reason: ${finishReason}.`;
+      }
+
+      return res.status(502).json({ error: message });
     }
 
     res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader(
+      'Content-Type',
+      'text/event-stream; charset=utf-8'
+    );
+    res.setHeader(
+      'Cache-Control',
+      'no-cache, no-transform'
+    );
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    res.write(
+      `data: ${JSON.stringify({ text })}\n\n`
+    );
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
+    res.write(
+      `data: ${JSON.stringify({ done: true })}\n\n`
+    );
 
-      buffer += decoder.decode(value, { stream: true });
-      const events = buffer.split('\n\n');
-      buffer = events.pop() || '';
-
-      for (const event of events) {
-        for (const line of event.split('\n')) {
-          if (!line.startsWith('data:')) continue;
-          const jsonText = line.slice(5).trim();
-          if (!jsonText || jsonText === '[DONE]') continue;
-
-          try {
-            const data = JSON.parse(jsonText);
-            if (data?.error) {
-              throw new Error(data.error.message || 'Gemini API error');
-            }
-            const text = data?.candidates?.[0]?.content?.parts
-              ?.map(part => part?.text || '')
-              .join('') || '';
-            if (text) {
-              res.write(`data: ${JSON.stringify({ text })}\n\n`);
-            }
-          } catch (e) {
-            if (e?.message && !/Unexpected token|Unexpected end of JSON input/.test(e.message)) {
-              throw e;
-            }
-          }
-        }
-      }
-    }
-
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
   } catch (error) {
     console.error('Chat API error:', error);
