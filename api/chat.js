@@ -6,55 +6,63 @@ export default async function handler(req, res) {
   try {
     const { messages } = req.body;
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    if (!Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: 'Invalid messages' });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({
-        error: 'Server missing ANTHROPIC_API_KEY'
+        error: 'Server missing GEMINI_API_KEY'
       });
     }
 
-    const anthropicRes = await fetch(
-      'https://api.anthropic.com/v1/messages',
+    const contents = messages.map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: String(m.content || '') }]
+    }));
+
+    const response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=' +
+        encodeURIComponent(apiKey),
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-5',
-          max_tokens: 1024,
-          messages: messages.map(m => ({
-            role: m.role,
-            content: m.content
-          }))
+          contents
         })
       }
     );
 
-    const data = await anthropicRes.json();
+    const data = await response.json();
 
-    if (!anthropicRes.ok) {
-      return res.status(anthropicRes.status).json({
-        error: data?.error?.message || 'Claude API error'
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error:
+          data?.error?.message ||
+          'Gemini API error'
       });
     }
 
-    const reply = (data.content || [])
-      .map(b => b.text || '')
-      .join('');
+    const reply =
+      data?.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text || '')
+        .join('') || '';
+
+    if (!reply) {
+      return res.status(500).json({
+        error: 'Gemini returned an empty response'
+      });
+    }
 
     return res.status(200).json({ reply });
 
-  } catch (err) {
+  } catch (error) {
     return res.status(500).json({
-      error: err.message
+      error: error.message || 'Server error'
     });
   }
-        }
+}
