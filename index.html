@@ -4,6 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Mini ChatGPT</title>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)'], ['$', '$']],
+    displayMath: [['\\[', '\\]'], ['$$', '$$']]
+  },
+  options: {
+    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+  },
+  startup: {
+    typeset: false
+  }
+};
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 <style>
@@ -92,7 +107,7 @@ button{cursor:pointer}
 
   <div id="inputBar">
     <button id="fileBtn" title="Attach text file">📎</button>
-    <textarea id="messageInput" rows="1" placeholder="Message Gemini…"></textarea>
+    <textarea id="messageInput" rows="1" placeholder="Message"></textarea>
     <button id="micBtn" title="Voice input">🎤</button>
     <button id="sendBtn">➤</button>
     <input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.js,.css,.html,.htm,.xml,.log,.py,.java,.c,.cpp,.ts,.tsx,.jsx">
@@ -159,6 +174,14 @@ function renderMarkdown(text){
   catch{const d=document.createElement('div');d.textContent=text;return d.innerHTML.replace(/\n/g,'<br>')}
 }
 
+function typesetMath(container){
+  if(!container || !window.MathJax || !window.MathJax.typesetPromise) return;
+  requestAnimationFrame(()=>{
+    window.MathJax.typesetClear?.([container]);
+    window.MathJax.typesetPromise([container]).catch(()=>{});
+  });
+}
+
 function copyText(text,btn,label='Copy'){
   if(navigator.clipboard) navigator.clipboard.writeText(text).catch(()=>{});
   btn.textContent='Copied!';
@@ -204,7 +227,7 @@ function render(){
         bubble.textContent=m.content;row.appendChild(bubble);
         if(m.attachmentName){const n=document.createElement('div');n.className='attachment-note';n.textContent='📎 '+m.attachmentName;row.appendChild(n)}
       }else{
-        bubble.innerHTML=renderMarkdown(m.content);enhanceCodeBlocks(bubble);row.appendChild(bubble);
+        bubble.innerHTML=renderMarkdown(m.content);enhanceCodeBlocks(bubble);typesetMath(bubble);row.appendChild(bubble);
         if(m.content)addResponseTools(row,m.content);
       }
       messagesEl.appendChild(row);
@@ -326,7 +349,7 @@ async function sendMessage(){
 function updateStreamingMessage(text){
   const rows=messagesEl.querySelectorAll('.message-row.assistant');if(!rows.length)return;
   const row=rows[rows.length-1],bubble=row.querySelector('.bubble.assistant');if(!bubble)return;
-  bubble.innerHTML=renderMarkdown(text);enhanceCodeBlocks(bubble);messagesEl.scrollTop=messagesEl.scrollHeight;
+  bubble.innerHTML=renderMarkdown(text);enhanceCodeBlocks(bubble);typesetMath(bubble);messagesEl.scrollTop=messagesEl.scrollHeight;
 }
 
 async function handleFile(file){
