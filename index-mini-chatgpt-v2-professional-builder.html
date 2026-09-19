@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Mini ChatGPT</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f0f10;--surface:#1a1a1c;--surface2:#232326;--surface3:#2a2a2e;--border:#2e2e32;--text:#e8e8ea;--dim:#9a9aa0;--accent:#10a37f;--user:#2b2b30;--danger:#e06c75}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;overscroll-behavior:none}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+#app{display:flex;flex-direction:column;height:100dvh}
+#topbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.icon-btn,.small-btn{background:none;border:1px solid var(--border);color:var(--text);border-radius:9px;padding:8px 11px;font-size:14px}
+.icon-btn:active,.small-btn:active,.tool-btn:active{background:var(--surface2)}
+#chatTitle{font-size:15px;font-weight:600;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tools-wrap{position:relative;flex-shrink:0}.tools-toggle{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 10px;font-size:13px}.tools-toggle:active,.tools-toggle.active{background:var(--surface3);border-color:var(--accent)}
+.tools-menu{display:none;position:absolute;right:0;top:calc(100% + 7px);width:190px;background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:7px;box-shadow:0 14px 35px rgba(0,0,0,.45);z-index:60}.tools-menu.open{display:block}
+.tool-menu-item{width:100%;display:flex;align-items:center;gap:9px;background:none;border:0;color:var(--text);border-radius:9px;padding:10px 11px;text-align:left;font-size:13px}.tool-menu-item:active,.tool-menu-item:hover{background:var(--surface2)}.tool-menu-divider{height:1px;background:var(--border);margin:5px 2px}
+@media(max-width:420px){#chatTitle{font-size:14px}.tools-toggle{padding:8px 9px;font-size:12px}.tools-menu{width:180px}}
+
+#historyPanel{display:none;background:var(--surface);border-bottom:1px solid var(--border);max-height:45vh;overflow:auto;flex-shrink:0}
+#historyPanel.open{display:block}
+.history-search{padding:10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface)}
+.history-search input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 11px;outline:none}
+.history-item{display:flex;align-items:center;gap:7px;padding:11px 10px;border-bottom:1px solid var(--surface2)}
+.history-item.active{background:var(--surface2)}
+.history-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:13px}
+.history-actions{display:flex;gap:4px}
+.history-actions button{background:none;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:4px 7px;font-size:11px}
+#errorBanner{display:none;background:#3a1e1e;color:#ffabab;font-size:13px;padding:9px 12px;text-align:center;flex-shrink:0}
+#messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:16px 12px 10px}
+#emptyState{margin:auto;color:var(--dim);font-size:14px;text-align:center;padding:20px}
+.message-row{display:flex;flex-direction:column;max-width:100%}
+.message-row.user{align-items:flex-end}.message-row.assistant{align-items:flex-start}
+.bubble{max-width:90%;padding:11px 15px;border-radius:16px;font-size:15px;line-height:1.55;word-wrap:break-word}
+.bubble.user{background:var(--user);border-bottom-right-radius:4px;white-space:pre-wrap}
+.bubble.assistant{background:var(--surface);border-bottom-left-radius:4px;width:100%}
+.bubble.assistant h1,.bubble.assistant h2,.bubble.assistant h3{margin:14px 0 8px;line-height:1.3}
+.bubble.assistant h1:first-child,.bubble.assistant h2:first-child,.bubble.assistant h3:first-child{margin-top:0}
+.bubble.assistant h1{font-size:19px}.bubble.assistant h2{font-size:17px}.bubble.assistant h3{font-size:15.5px}
+.bubble.assistant p{margin:0 0 10px}.bubble.assistant p:last-child{margin-bottom:0}
+.bubble.assistant ul,.bubble.assistant ol{margin:0 0 10px 22px}.bubble.assistant li{margin-bottom:4px}
+.bubble.assistant a{color:#6bc9f7;text-decoration:underline;word-break:break-all}
+.bubble.assistant blockquote{border-left:3px solid var(--border);padding-left:10px;color:var(--dim);margin:0 0 10px}
+.bubble.assistant code{background:var(--surface2);padding:2px 5px;border-radius:4px;font-size:13px;font-family:ui-monospace,monospace}
+.code-block-wrapper{background:#0a0a0b;border:1px solid var(--border);border-radius:10px;margin:10px 0;overflow:hidden}
+.code-block-header{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface3);border-bottom:1px solid var(--border)}
+.code-block-lang{font-size:11px;color:var(--dim);text-transform:uppercase}.code-copy-btn,.response-btn{background:none;border:1px solid var(--border);color:var(--dim);font-size:11px;padding:4px 9px;border-radius:6px}
+.code-block-wrapper pre{margin:0;padding:12px;overflow-x:auto}.code-block-wrapper pre code{background:none;padding:0;font-size:13px;white-space:pre}
+.response-tools{display:flex;gap:6px;margin-top:6px;align-self:flex-start}
+.code-preview-btn{background:none;border:1px solid var(--border);color:var(--dim);font-size:11px;padding:4px 9px;border-radius:6px}
+.code-preview-btn:active{background:var(--surface2)}
+#codeModeBtn.active{background:var(--surface2);border-color:var(--accent);color:var(--text)}
+#previewModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:40;padding:10px}
+#previewModal.open{display:flex;flex-direction:column}
+.preview-topbar{display:flex;align-items:center;gap:8px;padding:8px 4px 10px}
+.preview-title{font-size:14px;font-weight:600;flex:1}
+.preview-frame-wrap{flex:1;min-height:0;background:#fff;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+#previewFrame{width:100%;height:100%;border:0;background:#fff}
+.preview-note{font-size:11px;color:var(--dim);padding:7px 4px 2px}
+.response-btn{font-size:12px;padding:5px 10px}
+.attachment-note{font-size:11px;color:var(--dim);margin-top:5px}
+.typing{display:flex;gap:4px;padding:12px 14px;background:var(--surface);border-radius:14px;border-bottom-left-radius:4px}
+.typing span{width:6px;height:6px;border-radius:50%;background:var(--dim);animation:blink 1.2s infinite ease-in-out}
+.typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.3}40%{opacity:1}}
+#inputBar{display:flex;align-items:flex-end;gap:7px;padding:8px 10px calc(9px + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--bg);flex-shrink:0}
+#messageInput{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:14px;padding:11px 13px;font-size:15px;resize:none;max-height:130px;font-family:inherit;outline:none}
+#messageInput:focus{border-color:var(--accent)}
+#sendBtn,#micBtn,#fileBtn{border:none;color:#fff;width:44px;height:44px;border-radius:12px;flex-shrink:0}
+#sendBtn{background:var(--accent);font-size:17px}#micBtn,#fileBtn{background:var(--surface2);border:1px solid var(--border);font-size:18px}
+#micBtn.recording{background:#9b3b46}
+#sendBtn:disabled{opacity:.4}
+#fileInput{display:none}
+#fileChip{display:none;padding:6px 10px;background:var(--surface2);border-top:1px solid var(--border);font-size:12px;color:var(--dim);justify-content:space-between}
+#fileChip button{background:none;border:0;color:var(--text);font-size:16px}
+#settingsModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:20;padding:20px}
+#settingsModal.open{display:flex;align-items:center;justify-content:center}
+.modal{width:min(430px,100%);background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px}
+.modal h2{font-size:18px;margin-bottom:14px}.setting{margin-bottom:14px}.setting label{display:block;font-size:12px;color:var(--dim);margin-bottom:6px}
+.setting select{width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px}
+.modal-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:15px}
+.danger{color:#ff9b9b}
+@media(min-width:700px){.bubble{max-width:75%}#inputBar{padding-left:18px;padding-right:18px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <button class="icon-btn" id="historyBtn">☰</button>
+    <div id="chatTitle">New Chat</div>
+    <button class="project-badge" id="projectBadge" title="Current project">🧩 Project</button>
+    <div class="tools-wrap">
+      <button class="tools-toggle" id="toolsToggle" aria-expanded="false">⚡ Tools ▾</button>
+      <div class="tools-menu" id="toolsMenu">
+        <button class="tool-menu-item" id="toolChatBtn">💬 Chat</button>
+        <button class="tool-menu-item" id="toolBuildBtn">🛠️ Build</button>
+        <button class="tool-menu-item" id="toolEditBtn">✏️ Edit</button>
+        <button class="tool-menu-item" id="toolReviewBtn">👁️ Review</button>
+        <button class="tool-menu-item" id="toolProjectBtn">🧩 Project</button>
+        <button class="tool-menu-item" id="toolRepairBtn">🔧 Repair</button>
+        <button class="tool-menu-item" id="toolExportBtn">📦 Export</button>
+        <div class="tool-menu-divider"></div>
+        <button class="tool-menu-item" id="settingsBtn">⚙️ Settings</button>
+        <button class="tool-menu-item" id="newChatBtn">＋ New Chat</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="historyPanel"></div>
+  <div id="errorBanner"></div>
+  <div id="messages"><div id="emptyState">Ask me anything to get started.</div></div>
+
+  <div id="fileChip">
+    <span id="fileName"></span>
+    <button id="removeFileBtn">×</button>
+  </div>
+
+  <div id="inputBar">
+    <button id="fileBtn" title="Attach text file">📎</button>
+    <textarea id="messageInput" rows="1" placeholder="Message"></textarea>
+    <button id="micBtn" title="Voice input">🎤</button>
+    <button id="sendBtn">➤</button>
+    <input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.js,.css,.html,.htm,.xml,.log,.py,.java,.c,.cpp,.ts,.tsx,.jsx">
+  </div>
+</div>
+
+
+<div id="previewModal">
+  <div class="preview-topbar">
+    <div class="preview-title">👁️ Live Preview</div>
+    <button class="small-btn" id="improvePreviewBtn">✨ Improve</button><button class="small-btn" id="reloadPreviewBtn">↻ Reload</button>
+    <button class="small-btn" id="openPreviewTabBtn">Open</button>
+    <button class="small-btn" id="closePreviewBtn">Close</button>
+  </div>
+  <div class="preview-frame-wrap">
+    <iframe id="previewFrame" sandbox="allow-scripts allow-forms allow-modals"></iframe>
+  </div>
+  <div class="preview-note">Preview runs inside a sandboxed browser frame. It does not change your website files. Tip: if something looks wrong, tap ✨ Improve and tell the AI what to fix.</div>
+</div>
+
+<div id="settingsModal">
+  <div class="modal">
+    <h2>AI Settings</h2>
+    <div class="setting">
+      <label for="styleSelect">Assistant style</label>
+      <select id="styleSelect">
+        <option value="normal">Normal</option>
+        <option value="concise">Concise</option>
+        <option value="detailed">Detailed</option>
+        <option value="coding">Coding</option>
+        <option value="trading">Trading Assistant</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label>Current chat</label>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="small-btn" id="shareChatBtn">Share chat</button>
+        <button class="small-btn" id="downloadChatBtn">Download .txt</button>
+      </div>
+    </div>
+    <div class="setting">
+      <label>Local data</label>
+      <button class="small-btn danger" id="clearAllBtn">Delete all saved chats</button>
+    </div>
+    <div class="modal-actions">
+      <button class="small-btn" id="closeSettingsBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY='mini-chatgpt-conversations-v2';
+const SETTINGS_KEY='mini-chatgpt-settings-v1';
+
+let conversations=[];
+let activeId=null;
+let loading=false;
+let attachedFile=null;
+let recognition=null;
+let isRecording=false;
+let codeMode=false;
+let currentPreviewCode='';
+
+const $=id=>document.getElementById(id);
+const messagesEl=$('messages'), historyPanel=$('historyPanel'), chatTitle=$('chatTitle');
+const errorBanner=$('errorBanner'), input=$('messageInput'), sendBtn=$('sendBtn');
+const micBtn=$('micBtn'), fileInput=$('fileInput'), fileChip=$('fileChip'), fileName=$('fileName');
+
+function loadConversations(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}catch{return[]}}
+function saveConversations(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(conversations))}catch{}}
+function newConversation(){return{id:Date.now().toString()+Math.random().toString(36).slice(2),title:'New Chat',messages:[],fileContext:null,projectCode:null}}
+function getActive(){return conversations.find(c=>c.id===activeId)}
+function getSettings(){try{return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{"style":"normal"}')}catch{return{style:'normal'}}}
+function saveSettings(s){localStorage.setItem(SETTINGS_KEY,JSON.stringify(s))}
+function showError(msg){errorBanner.textContent=msg;errorBanner.style.display='block'}
+function getProjectCode(){
+  const active=getActive();
+  return active&&active.projectCode?String(active.projectCode):'';
+}
+function setProjectCode(code){
+  const active=getActive();
+  if(!active)return;
+  active.projectCode=code||null;
+  saveConversations();
+  updateProjectBadge();
+}
+function updateProjectBadge(){
+  const badge=$('projectBadge');
+  if(!badge)return;
+  const has=!!getProjectCode();
+  badge.classList.toggle('active',has);
+  badge.textContent=has?'🧩 Project loaded':'🧩 Project';
+}
+
+function hideError(){errorBanner.style.display='none'}
+
+$('projectBadge').onclick=()=>{
+  if(!getProjectCode())return;
+  if(confirm('Clear the current project from this chat?')){
+    setProjectCode('');
+    showError('Current project cleared. Your chat history is still safe.');
+    setTimeout(hideError,2200);
+  }
+};
+
+function cleanMath(text){
+  let out = String(text || '');
+
+  // Convert common LaTeX-style math into clean plain text. This is intentional:
+  // the chat is mobile-first, so equations should remain readable everywhere.
+  out = out.replace(/\$\$([\s\S]*?)\$\$/g, '$1');
+  out = out.replace(/\\\[([\s\S]*?)\\\]/g, '$1');
+  out = out.replace(/\\\(([\s\S]*?)\\\)/g, '$1');
+  out = out.replace(/\$([^$\n]+)\$/g, '$1');
+
+  // Remove text/textbf wrappers, including the common simple cases.
+  for(let i=0;i<3;i++){
+    out = out.replace(/\\textbf\s*\{([^{}]*)\}/g, '$1');
+    out = out.replace(/\\text\s*\{([^{}]*)\}/g, '$1');
+    out = out.replace(/\\mathrm\s*\{([^{}]*)\}/g, '$1');
+  }
+
+  out = out
+    .replace(/\\times/g, ' × ')
+    .replace(/\\cdot/g, ' · ')
+    .replace(/\\div/g, ' ÷ ')
+    .replace(/\\pm/g, ' ± ')
+    .replace(/\\leq/g, ' ≤ ')
+    .replace(/\\geq/g, ' ≥ ')
+    .replace(/\\neq/g, ' ≠ ')
+    .replace(/\\%/g, '%')
+    .replace(/\\left/g, '')
+    .replace(/\\right/g, '')
+    .replace(/\\,/g, ' ')
+    .replace(/\\!/g, '')
+    .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1 ÷ $2)')
+    .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+    .replace(/\\[a-zA-Z]+/g, '')
+    .replace(/[{}]/g, '');
+
+  // Gemini occasionally emits doubled currency symbols around a formula.
+  out = out.replace(/₦{2,}/g, '₦');
+  out = out.replace(/[ \t]{2,}/g, ' ');
+  return out;
+}
+
+function renderMarkdown(text){
+  try{return DOMPurify.sanitize(marked.parse(cleanMath(text),{breaks:true,gfm:true}))}
+  catch{const d=document.createElement('div');d.textContent=cleanMath(text);return d.innerHTML.replace(/\n/g,'<br>')}
+}
+
+
+function copyText(text,btn,label='Copy'){
+  if(navigator.clipboard) navigator.clipboard.writeText(text).catch(()=>{});
+  btn.textContent='Copied!';
+  setTimeout(()=>btn.textContent=label,1400);
+}
+
+
+function isPreviewableCode(code,lang){
+  const l=(lang||'').toLowerCase();
+  if(['html','htm'].includes(l))return true;
+  return /<!doctype\s+html|<html[\s>]|<body[\s>]|<style[\s>]|<script[\s>]/i.test(code||'');
+}
+
+function buildPreviewDocument(code){
+  const source=String(code||'').trim();
+  if(!source)return '';
+  if(/<!doctype\s+html|<html[\s>]/i.test(source))return source;
+  if(/<style[\s>]|<script[\s>]|<[a-z][\s\S]*>/i.test(source)){
+    return '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;min-height:100%;font-family:Arial,sans-serif}</style></head><body>'+source+'</body></html>';
+  }
+  return '';
+}
+
+
+function extractBestHtmlCode(text){
+  const matches=[...String(text||'').matchAll(/```(?:html?|htm)?\s*([\s\S]*?)```/gi)]
+    .map(m=>m[1].trim())
+    .filter(c=>isPreviewableCode(c,'html'));
+  if(!matches.length)return '';
+  return matches.sort((a,b)=>b.length-a.length)[0];
+}
+
+function rememberLatestGeneratedProject(text){
+  const code=extractBestHtmlCode(text);
+  if(code){
+    const doc=buildPreviewDocument(code);
+    if(doc)setProjectCode(doc);
+  }
+  return code;
+}
+
+function openPreview(code){
+  const doc=buildPreviewDocument(code);
+  if(!doc){
+    showError('Preview works with HTML/HTML fragments. Ask me to generate a complete HTML page first.');
+    return;
+  }
+  currentPreviewCode=doc;
+  setProjectCode(doc);
+  const frame=$('previewFrame');
+  frame.onload=()=>{
+    try{
+      frame.contentWindow.addEventListener('error',e=>{
+        showError('Preview JavaScript error: '+(e.message||'Unknown error'));
+      });
+      frame.contentWindow.addEventListener('unhandledrejection',e=>{
+        showError('Preview error: '+(e.reason?.message||e.reason||'Unhandled promise rejection'));
+      });
+    }catch{}
+  };
+  frame.srcdoc=doc;
+  $('previewModal').classList.add('open');
+}
+
+function closePreview(){
+  $('previewModal').classList.remove('open');
+  $('previewFrame').srcdoc='';
+  currentPreviewCode=getProjectCode();
+}
+
+function enhanceCodeBlocks(container){
+  container.querySelectorAll('pre').forEach(pre=>{
+    if(pre.parentElement.classList.contains('code-block-wrapper'))return;
+    const code=pre.querySelector('code');if(!code)return;
+    const match=(code.className||'').match(/language-(\w+)/);
+    const wrapper=document.createElement('div');wrapper.className='code-block-wrapper';
+    const header=document.createElement('div');header.className='code-block-header';
+    const lang=document.createElement('span');lang.className='code-block-lang';lang.textContent=match?match[1]:'code';
+    const btn=document.createElement('button');btn.className='code-copy-btn';btn.textContent='Copy';
+    btn.onclick=()=>copyText(code.textContent||'',btn,'Copy');
+    header.append(lang,btn);
+    const rawCode=code.textContent||'';
+    if(isPreviewableCode(rawCode,match?match[1]:'')){
+      const preview=document.createElement('button');
+      preview.className='code-preview-btn';
+      preview.textContent='Preview';
+      preview.onclick=()=>openPreview(rawCode);
+      header.appendChild(preview);
+    }
+    pre.parentNode.insertBefore(wrapper,pre);
+    wrapper.append(header,pre);
+  });
+}
+
+function addResponseTools(row,content){
+  const tools=document.createElement('div');tools.className='response-tools';
+  const copy=document.createElement('button');copy.className='response-btn';copy.textContent='Copy response';
+  copy.onclick=()=>copyText(content,copy,'Copy response');
+  const speak=document.createElement('button');speak.className='response-btn';speak.textContent='🔊 Read';
+  speak.onclick=()=>speakText(content);
+  const share=document.createElement('button');share.className='response-btn';share.textContent='Share';
+  share.onclick=()=>shareText(content);
+  tools.append(copy,speak,share);row.appendChild(tools);
+}
+
+function render(){
+  const active=getActive();
+  chatTitle.textContent=active?active.title:'Mini ChatGPT';
+  updateProjectBadge();
+  messagesEl.innerHTML='';
+  if(!active||!active.messages.length){
+    const empty=document.createElement('div');empty.id='emptyState';empty.textContent='Ask me anything to get started.';messagesEl.appendChild(empty);
+  }else{
+    active.messages.forEach(m=>{
+      const row=document.createElement('div');row.className='message-row '+(m.role==='user'?'user':'assistant');
+      const bubble=document.createElement('div');bubble.className='bubble '+(m.role==='user'?'user':'assistant');
+      if(m.role==='user'){
+        bubble.textContent=m.content;row.appendChild(bubble);
+        if(m.attachmentName){const n=document.createElement('div');n.className='attachment-note';n.textContent='📎 '+m.attachmentName;row.appendChild(n)}
+      }else{
+        bubble.innerHTML=renderMarkdown(m.content);enhanceCodeBlocks(bubble);row.appendChild(bubble);
+        if(m.content)addResponseTools(row,m.content);
+      }
+      messagesEl.appendChild(row);
+    });
+  }
+  if(loading){
+    const row=document.createElement('div');row.className='message-row assistant';
+    const t=document.createElement('div');t.className='typing';t.innerHTML='<span></span><span></span><span></span>';row.appendChild(t);messagesEl.appendChild(row);
+  }
+  messagesEl.scrollTop=messagesEl.scrollHeight;
+  renderHistory();
+  sendBtn.disabled=loading||!input.value.trim();
+}
+
+function renderHistory(filter=''){
+  historyPanel.innerHTML='';
+  const searchWrap=document.createElement('div');searchWrap.className='history-search';
+  const search=document.createElement('input');search.placeholder='Search chats…';search.value=filter;
+  search.oninput=()=>renderHistory(search.value);
+  searchWrap.appendChild(search);historyPanel.appendChild(searchWrap);
+  const q=filter.toLowerCase();
+  conversations.filter(c=>!q||c.title.toLowerCase().includes(q)||c.messages.some(m=>m.content.toLowerCase().includes(q))).forEach(c=>{
+    const item=document.createElement('div');item.className='history-item '+(c.id===activeId?'active':'');
+    const name=document.createElement('span');name.className='history-name';name.textContent=c.title;
+    name.onclick=()=>{activeId=c.id;historyPanel.classList.remove('open');hideError();render()};
+    const actions=document.createElement('div');actions.className='history-actions';
+    const rename=document.createElement('button');rename.textContent='Rename';
+    rename.onclick=()=>{const n=prompt('Chat name:',c.title);if(n&&n.trim()){c.title=n.trim();saveConversations();renderHistory(q)}};
+    const del=document.createElement('button');del.textContent='Delete';
+    del.onclick=()=>{if(confirm('Delete this chat?')){conversations=conversations.filter(x=>x.id!==c.id);if(activeId===c.id){if(!conversations.length){const n=newConversation();conversations.push(n)}activeId=conversations[0].id}saveConversations();render()}};
+    actions.append(rename,del);item.append(name,actions);historyPanel.appendChild(item);
+  });
+}
+
+function speakText(text){
+  if(!('speechSynthesis' in window)){showError('Read aloud is not supported by this browser.');return}
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text.replace(/[*_`#]/g,''));
+  u.rate=1;u.pitch=1;speechSynthesis.speak(u);
+}
+
+async function shareText(text){
+  try{
+    if(navigator.share) await navigator.share({title:'Mini ChatGPT response',text});
+    else await navigator.clipboard.writeText(text);
+  }catch{}
+}
+
+async function shareConversation(){
+  const c=getActive();if(!c)return;
+  const text=c.messages.map(m=>(m.role==='user'?'You':'Gemini')+': '+m.content).join('\n\n');
+  await shareText(text);
+}
+
+function downloadConversation(){
+  const c=getActive();if(!c)return;
+  const text=c.messages.map(m=>(m.role==='user'?'You':'Gemini')+': '+m.content).join('\n\n');
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=(c.title||'chat').replace(/[^\w\-]+/g,'_')+'.txt';a.click();URL.revokeObjectURL(a.href);
+}
+
+function styleInstruction(){
+  const s=codeMode?'coding':getSettings().style;
+  let style='Be a helpful, accurate general-purpose AI assistant. Explain things clearly and naturally.';
+  if(s==='concise')style='Be concise. Give the useful answer directly and avoid unnecessary explanation.';
+  if(s==='detailed')style='Give detailed, well-structured explanations with examples when useful.';
+  if(s==='coding')style=`Act as a practical coding assistant and mobile-first web builder. Give complete, working code when code is requested and explain important changes briefly. When the user asks for a webpage or app, prefer a single self-contained HTML file with embedded CSS and JavaScript so it can be previewed directly. Put code inside fenced code blocks with the correct language label.
+
+For every webpage/app intended for this Mini ChatGPT preview:
+- This is a functional website builder, not a visual mockup. Every interactive control you create must actually work.
+- Do not default every project to plain black-and-white styling. Unless the user explicitly asks for monochrome, choose a professional, intentional color palette with a clear primary color, secondary/accent color, readable text contrast, and subtle surfaces, borders, gradients, or shadows where appropriate.
+- Make the visual design feel finished and professional: strong hierarchy, balanced spacing, polished cards/containers, consistent button states, tasteful icons or simple illustrations when useful, and responsive mobile-first composition.
+- Use color with purpose rather than random bright colors. Keep accessibility and text contrast in mind.
+- Match the palette to the project type when possible, but follow the user's requested style when one is given.
+- For buttons, calculator keys, menus, forms, tabs, navigation, toggles, search, delete, clear, submit, and other controls, implement the required JavaScript event handling and verify the logic.
+- Prefer plain HTML/CSS/JavaScript with no external framework or CDN dependency unless the user explicitly asks for one, so the preview works immediately inside the sandbox.
+- Put all required JavaScript inside the returned self-contained HTML.
+- Never create decorative buttons that look functional but have no action.
+- For calculators specifically, wire every number/operator/control key, prevent invalid expressions, support decimal input, clear/delete, and make = actually compute the result.
+- Before returning interactive code, mentally test the main user flow (for a calculator, e.g. 7 + 5 = 12) and fix obvious runtime errors.
+
+For every webpage/app intended for this Mini ChatGPT preview:
+- Design mobile-first for small Android phone screens before desktop.
+- Use responsive CSS with max-width:100%, box-sizing:border-box, and no horizontal page overflow.
+- Use CSS Grid or Flexbox for controls and keypad layouts.
+- Give related buttons consistent width/height and prevent accidental stretching.
+- Use touch-friendly buttons (normally at least about 44px tall) with sensible gaps.
+- Keep the main interface inside a responsive container that fits the viewport.
+- Use responsive typography, spacing, and media queries where useful.
+- Make forms, cards, calculators, navigation, and buttons usable with one hand on a phone.
+- Include viewport-friendly CSS and avoid fixed desktop widths.
+- Make JavaScript robust: prevent duplicate decimal points, invalid states, trailing operators, and obvious runtime errors when relevant.
+- When the user asks for a calculator, make the keypad a proper responsive grid with equal-sized keys and a clearly sized display.
+- Before presenting code, mentally check the layout for narrow screens around 320–430px wide.
+- If the user asks to improve an existing webpage, preserve its useful features and fix the requested problem instead of replacing unrelated functionality.`;
+  if(s==='trading')style='Act as a careful trading education assistant. Explain risk management and trading concepts clearly. Do not present financial outcomes as guaranteed.';
+  return style + `
+
+Important response rules:
+- Be mathematically accurate. Recheck calculations before answering.
+- When explaining calculations, use plain-text equations such as "₦1,500,000 × 0.01 = ₦15,000". Do NOT use LaTeX, $$...$$, \( ... \), or \[ ... \].
+- Do not claim that 100 consecutive 1% losses would reduce a compounding account to zero. If 1% is calculated from the current balance, explain that losses compound; if it is a fixed monetary risk, state that assumption explicitly.
+- For trading risk, distinguish the planned maximum loss at the stop-loss from the position size/lot size.
+- If the user asks for a factual calculation, show the calculation clearly and give the final number.`;
+}
+
+async function sendMessage(){
+  const text=input.value.trim();if(!text||loading)return;
+  hideError();
+  const active=getActive();
+  const isFirst=active.messages.length===0;
+  active.messages.push({role:'user',content:text,attachmentName:attachedFile?attachedFile.name:null});
+  if(isFirst)active.title=text.slice(0,40);
+  const assistant={role:'assistant',content:''};active.messages.push(assistant);
+  const fileForRequest=active.fileContext;
+  attachedFile=null;fileChip.style.display='none';fileInput.value='';
+  input.value='';input.style.height='auto';loading=true;render();saveConversations();
+
+  try{
+    const projectForRequest=getProjectCode();
+    const projectContext=projectForRequest?`\n\nCURRENT PROJECT CONTEXT:\nThe user is currently building or modifying the webpage/app below. Treat it as the current working project when the user asks to modify, improve, fix, extend, redesign, or continue it. Preserve useful existing functionality unless the user explicitly asks to remove it. Do not include the full project code in a normal answer unless the user asks for code. If the user asks for a change, return a complete updated self-contained HTML file when practical.\n\n--- CURRENT PROJECT START ---\n${projectForRequest.slice(0,30000)}\n--- CURRENT PROJECT END ---`:'';
+    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      messages:active.messages.filter(m=>m!==assistant&&m.content),
+      systemInstruction:styleInstruction()+projectContext+(fileForRequest?'\n\nThe user attached a file. Use the following file content as context when answering:\n\n--- FILE START ---\n'+fileForRequest+'\n--- FILE END ---':'')
+    })});
+    if(!res.ok){
+      let msg='Request failed.';
+      try{const d=await res.json();msg=d.error||msg}catch{}
+      throw new Error(msg);
+    }
+    if(!res.body)throw new Error('No response stream received.');
+    const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
+    while(true){
+      const {value,done}=await reader.read();if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const events=buffer.split('\n\n');buffer=events.pop()||'';
+      for(const event of events){
+        for(const line of event.split('\n')){
+          if(!line.startsWith('data:'))continue;
+          const raw=line.slice(5).trim();if(!raw)continue;
+          try{
+            const d=JSON.parse(raw);
+            if(d.error)throw new Error(d.error);
+            if(d.text){assistant.content+=d.text;updateStreamingMessage(assistant.content)}
+          }catch(e){if(e.message&&e.message!=='Unexpected end of JSON input')throw e}
+        }
+      }
+    }
+    if(!assistant.content.trim())throw new Error('Gemini returned an empty response.');
+    rememberLatestGeneratedProject(assistant.content);
+  }catch(err){
+    if(!assistant.content)active.messages=active.messages.filter(m=>m!==assistant);
+    showError(err.message||'Failed to reach Gemini.');
+  }finally{loading=false;saveConversations();render()}
+}
+
+function updateStreamingMessage(text){
+  const rows=messagesEl.querySelectorAll('.message-row.assistant');if(!rows.length)return;
+  const row=rows[rows.length-1],bubble=row.querySelector('.bubble.assistant');if(!bubble)return;
+  bubble.innerHTML=renderMarkdown(text);enhanceCodeBlocks(bubble);messagesEl.scrollTop=messagesEl.scrollHeight;
+}
+
+async function handleFile(file){
+  if(!file)return;
+  if(file.size>500000){showError('Please keep text files under 500 KB.');return}
+  try{
+    const text=await file.text();
+    const active=getActive();
+    active.fileContext=text;
+    attachedFile=file;
+    fileName.textContent='📎 '+file.name;
+    fileChip.style.display='flex';
+    hideError();saveConversations();
+  }catch{showError('Could not read that file.')}
+}
+
+fileInput.onchange=e=>handleFile(e.target.files[0]);
+$('fileBtn').onclick=()=>fileInput.click();
+$('removeFileBtn').onclick=()=>{attachedFile=null;const c=getActive();if(c)c.fileContext=null;fileChip.style.display='none';fileInput.value='';saveConversations()};
+$('sendBtn').onclick=sendMessage;
+
+input.addEventListener('input',()=>{sendBtn.disabled=loading||!input.value.trim();input.style.height='auto';input.style.height=Math.min(input.scrollHeight,130)+'px'});
+input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
+
+function setupVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){micBtn.onclick=()=>showError('Voice input is not supported by this browser.');return}
+  recognition=new SR();recognition.lang='en-NG';recognition.interimResults=true;recognition.continuous=false;
+  recognition.onstart=()=>{isRecording=true;micBtn.classList.add('recording');micBtn.textContent='⏹'};
+  recognition.onresult=e=>{let finalText='';for(let i=e.resultIndex;i<e.results.length;i++)finalText+=e.results[i][0].transcript;input.value=finalText;input.dispatchEvent(new Event('input'))};
+  recognition.onerror=e=>{showError('Voice input error: '+e.error)};
+  recognition.onend=()=>{isRecording=false;micBtn.classList.remove('recording');micBtn.textContent='🎤'};
+  micBtn.onclick=()=>{if(isRecording)recognition.stop();else{hideError();recognition.start()}};
+}
+setupVoice();
+
+$('historyBtn').onclick=()=>historyPanel.classList.toggle('open');
+
+$('newChatBtn').onclick=()=>{
+  const c=newConversation();conversations.unshift(c);activeId=c.id;
+  attachedFile=null;fileChip.style.display='none';fileInput.value='';
+  historyPanel.classList.remove('open');hideError();saveConversations();render();
+};
+
+$('settingsBtn').onclick=()=>{
+  $('styleSelect').value=getSettings().style||'normal';$('settingsModal').classList.add('open');
+};
+$('closeSettingsBtn').onclick=()=>$('settingsModal').classList.remove('open');
+$('settingsModal').addEventListener('click',e=>{if(e.target.id==='settingsModal')$('settingsModal').classList.remove('open')});
+$('styleSelect').onchange=e=>{const s=getSettings();s.style=e.target.value;saveSettings(s)};
+$('shareChatBtn').onclick=async()=>{await shareConversation();};
+$('downloadChatBtn').onclick=()=>{downloadConversation();};
+$('clearAllBtn').onclick=()=>{
+  if(!confirm('Delete ALL saved chats from this browser?'))return;
+  conversations=[newConversation()];activeId=conversations[0].id;saveConversations();$('settingsModal').classList.remove('open');render();
+};
+
+function addHistoryExtraActions(){
+  const active=getActive();if(!active)return;
+  /* Share/download are available from the browser prompt via long-term storage.
+     We expose them with a simple title action menu below. */
+}
+
+
+function closeToolsMenu(){
+  $('toolsMenu').classList.remove('open');
+  $('toolsToggle').classList.remove('active');
+  $('toolsToggle').setAttribute('aria-expanded','false');
+}
+function openToolsMenu(){
+  $('toolsMenu').classList.add('open');
+  $('toolsToggle').classList.add('active');
+  $('toolsToggle').setAttribute('aria-expanded','true');
+}
+$('toolsToggle').onclick=e=>{e.stopPropagation();$('toolsMenu').classList.contains('open')?closeToolsMenu():openToolsMenu()};
+document.addEventListener('click',e=>{if(!e.target.closest('.tools-wrap'))closeToolsMenu()});
+function setBuilderMode(mode){
+  const s=getSettings();
+  if(mode==='chat'){codeMode=false;s.style='normal';input.placeholder='Message';}
+  if(mode==='build'){codeMode=true;s.style='coding';input.placeholder='Describe what you want me to build…';}
+  saveSettings(s); closeToolsMenu(); input.focus();
+}
+$('toolChatBtn').onclick=()=>setBuilderMode('chat');
+$('toolBuildBtn').onclick=()=>setBuilderMode('build');
+$('toolEditBtn').onclick=()=>{setBuilderMode('build'); if(getProjectCode()) input.value='Edit the current project. Keep all existing working features and make only the changes I describe: ';};
+$('toolReviewBtn').onclick=()=>{closeToolsMenu();input.value=getProjectCode()?'Review the current project for design quality, mobile responsiveness, accessibility, and broken functionality. Do not remove working features. Tell me what should be improved.':'Review the current chat and tell me what I should improve.';input.focus()};
+$('toolProjectBtn').onclick=()=>{closeToolsMenu();if(getProjectCode()){showError('🧩 Current project is loaded in this chat.');setTimeout(hideError,2200)}else{showError('No project is loaded yet. Build a website first.');setTimeout(hideError,2200)}};
+$('toolRepairBtn').onclick=()=>{closeToolsMenu();if(!getProjectCode()){showError('No project to repair yet. Build a website first.');setTimeout(hideError,2200);return}input.value='Repair the current project. Find and fix broken buttons, JavaScript errors, layout problems, and mobile issues while preserving every working feature. Return the complete updated HTML.';input.focus()};
+$('toolExportBtn').onclick=()=>{closeToolsMenu();if(getProjectCode()){const blob=new Blob([getProjectCode()],{type:'text/html;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=((getActive()?.title||'mini-chatgpt-project').replace(/[^\w\-]+/g,'_'))+'.html';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}else{showError('No current project to export. Build a website first.');setTimeout(hideError,2200)}};
+
+// Build/Chat mode is controlled from the Tools dropdown.
+
+
+$('closePreviewBtn').onclick=closePreview;
+
+$('improvePreviewBtn').onclick=()=>{
+  closePreview();
+  input.value='Fix and improve the current project preview. Use the current project already loaded in this chat as the starting point. Keep all existing features. Most importantly, make every visible button/control actually functional: wire the JavaScript events, fix any runtime errors, and test the main interactions before returning the code. For calculators, verify a basic flow such as 7 + 5 = 12. Also keep the layout mobile responsive, prevent horizontal overflow, and return the complete updated self-contained HTML so I can preview the new version.';
+  input.focus();
+};
+
+$('previewModal').addEventListener('click',e=>{
+  if(e.target.id==='previewModal')closePreview();
+});
+$('reloadPreviewBtn').onclick=()=>{
+  const code=currentPreviewCode||getProjectCode();
+  if(code)openPreview(code);
+};
+
+$('openPreviewTabBtn').onclick=()=>{
+  if(!currentPreviewCode)return;
+  const blob=new Blob([currentPreviewCode],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+};
+
+function init(){
+  conversations=loadConversations();
+  if(!conversations.length)conversations=[newConversation()];
+  activeId=conversations[0].id;
+  const s=getSettings();$('styleSelect').value=s.style||'normal';
+  codeMode=s.style==='coding';input.placeholder=codeMode?'Describe what you want me to build…':'Message';
+  render();
+}
+init();
+</script>
+</body>
+</html>
