@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Mini ChatGPT V5.1</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f0f10;--surface:#1a1a1c;--surface2:#232326;--surface3:#2a2a2e;--border:#2e2e32;--text:#e8e8ea;--dim:#9a9aa0;--accent:#10a37f;--user:#2b2b30;--danger:#e06c75}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;overscroll-behavior:none}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+#app{display:flex;flex-direction:column;height:100dvh}
+#topbar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.icon-btn,.small-btn{background:none;border:1px solid var(--border);color:var(--text);border-radius:9px;padding:8px 11px;font-size:14px}
+.icon-btn:active,.small-btn:active,.tool-btn:active{background:var(--surface2)}
+#chatTitle{font-size:15px;font-weight:600;flex:1;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#v3Badge{display:inline-flex;align-items:center;padding:4px 7px;border-radius:7px;background:var(--surface2);border:1px solid var(--border);color:var(--dim);font-size:10px;font-weight:700}
+.tools-wrap{position:relative;flex-shrink:0}.tools-toggle{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 10px;font-size:13px}.tools-toggle:active,.tools-toggle.active{background:var(--surface3);border-color:var(--accent)}
+.tools-menu{display:none;position:absolute;right:0;top:calc(100% + 7px);width:210px;background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:7px;box-shadow:0 14px 35px rgba(0,0,0,.45);z-index:300}.tools-menu.open{display:block}
+.tool-menu-item{width:100%;display:flex;align-items:center;gap:9px;background:none;border:0;color:var(--text);border-radius:9px;padding:10px 11px;text-align:left;font-size:13px}.tool-menu-item:active,.tool-menu-item:hover{background:var(--surface2)}.tool-menu-divider{height:1px;background:var(--border);margin:5px 2px}
+@media(max-width:420px){#chatTitle{font-size:14px}.tools-toggle{padding:8px 9px;font-size:12px}.tools-menu{width:180px}}
+
+#historyPanel{display:none;background:var(--surface);border-bottom:1px solid var(--border);max-height:45vh;overflow:auto;flex-shrink:0}
+#historyPanel.open{display:block}
+.history-search{padding:10px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface)}
+.history-search input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:9px 11px;outline:none}
+.history-item{display:flex;align-items:center;gap:7px;padding:11px 10px;border-bottom:1px solid var(--surface2)}
+.history-item.active{background:var(--surface2)}
+.history-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-size:13px}
+.history-actions{display:flex;gap:4px}
+.history-actions button{background:none;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:4px 7px;font-size:11px}
+#errorBanner{display:none;background:#3a1e1e;color:#ffabab;font-size:13px;padding:9px 12px;text-align:center;flex-shrink:0}
+#messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:16px 12px 10px}
+#emptyState{margin:auto;color:var(--dim);font-size:14px;text-align:center;padding:20px}
+.message-row{display:flex;flex-direction:column;max-width:100%}
+.message-row.user{align-items:flex-end}.message-row.assistant{align-items:flex-start}
+.bubble{max-width:90%;padding:11px 15px;border-radius:16px;font-size:15px;line-height:1.55;word-wrap:break-word}
+.bubble.user{background:var(--user);border-bottom-right-radius:4px;white-space:pre-wrap}
+.bubble.assistant{background:var(--surface);border-bottom-left-radius:4px;width:100%}
+.bubble.assistant h1,.bubble.assistant h2,.bubble.assistant h3{margin:14px 0 8px;line-height:1.3}
+.bubble.assistant h1:first-child,.bubble.assistant h2:first-child,.bubble.assistant h3:first-child{margin-top:0}
+.bubble.assistant h1{font-size:19px}.bubble.assistant h2{font-size:17px}.bubble.assistant h3{font-size:15.5px}
+.bubble.assistant p{margin:0 0 10px}.bubble.assistant p:last-child{margin-bottom:0}
+.bubble.assistant ul,.bubble.assistant ol{margin:0 0 10px 22px}.bubble.assistant li{margin-bottom:4px}
+.bubble.assistant a{color:#6bc9f7;text-decoration:underline;word-break:break-all}
+.bubble.assistant blockquote{border-left:3px solid var(--border);padding-left:10px;color:var(--dim);margin:0 0 10px}
+.bubble.assistant code{background:var(--surface2);padding:2px 5px;border-radius:4px;font-size:13px;font-family:ui-monospace,monospace}
+.code-block-wrapper{background:#0a0a0b;border:1px solid var(--border);border-radius:10px;margin:10px 0;overflow:hidden}
+.code-block-header{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface3);border-bottom:1px solid var(--border)}
+.code-block-lang{font-size:11px;color:var(--dim);text-transform:uppercase}.code-copy-btn,.response-btn{background:none;border:1px solid var(--border);color:var(--dim);font-size:11px;padding:4px 9px;border-radius:6px}
+.code-block-wrapper pre{margin:0;padding:12px;overflow-x:auto}.code-block-wrapper pre code{background:none;padding:0;font-size:13px;white-space:pre}
+.response-tools{display:flex;gap:6px;margin-top:6px;align-self:flex-start}
+.code-preview-btn{background:none;border:1px solid var(--border);color:var(--dim);font-size:11px;padding:4px 9px;border-radius:6px}
+.code-preview-btn:active{background:var(--surface2)}
+#codeModeBtn.active{background:var(--surface2);border-color:var(--accent);color:var(--text)}
+#previewModal{display:none;position:fixed;inset:0;width:100vw;height:100dvh;background:#080808;z-index:9999;padding:0;overflow:hidden;box-sizing:border-box}
+#previewModal.open{display:block;width:100vw;height:100dvh;min-height:100dvh}
+.preview-frame-wrap{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;background:#111}
+#previewFrame{display:block;width:100%;height:100%;min-width:0;min-height:0;max-width:none;border:0;background:#fff}
+.preview-note{display:none}
+@media(max-width:520px){.preview-note{display:none}}
+#projectManagerModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:45;padding:18px}
+#projectManagerModal.open{display:flex;align-items:center;justify-content:center}
+.project-manager{width:min(560px,100%);max-height:85vh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.project-manager-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.project-manager-head h3{margin:0;flex:1}
+.project-manager-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px}
+.project-list{display:grid;gap:8px}
+.project-item{display:flex;align-items:center;gap:10px;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px}
+.project-item-info{flex:1;min-width:0}
+.project-item-title{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.project-item-meta{font-size:11px;color:var(--dim);margin-top:3px}
+.project-item button{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;padding:7px 9px}
+.preview-switch{display:flex;gap:6px;margin-left:auto}
+.preview-switch button{border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:8px;padding:7px 10px;font-size:12px}
+.preview-switch button.active{border-color:var(--accent);background:var(--accent);color:#08110e}
+
+#previewModal.open{display:flex;flex-direction:column}
+
+/* Full-screen phone-sized live preview */
+#previewModal.open{width:100vw;height:100dvh;min-height:100dvh;padding:0;overflow:hidden}
+
+/* Full-screen preview toolbar: always visible above the website */
+.preview-topbar{
+  position:absolute;top:0;left:0;right:0;z-index:10000;
+  display:flex;align-items:center;gap:7px;padding:8px 8px;
+  min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
+  background:rgba(10,10,12,.94);backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);box-sizing:border-box;
+}
+.preview-topbar::-webkit-scrollbar{display:none}
+.preview-title{font-size:14px;font-weight:700;flex:0 0 auto;min-width:max-content;color:#fff}
+.preview-back-btn{border:1px solid rgba(255,255,255,.22);background:#24242a;color:#fff;
+  padding:8px 11px;border-radius:10px;font:700 12px system-ui,-apple-system,sans-serif;
+  cursor:pointer;white-space:nowrap;flex:0 0 auto}
+.preview-back-btn:hover{background:#303038}
+.preview-back-btn:active{transform:scale(.98)}
+.preview-switch{display:flex;gap:5px;flex:0 0 auto}
+.preview-switch button{border:1px solid var(--border);background:var(--surface2);color:var(--text);
+  border-radius:9px;padding:7px 9px;font-size:12px;white-space:nowrap;flex:0 0 auto}
+.preview-switch button.active{border-color:var(--accent);background:var(--accent);color:#08110e}
+.preview-topbar .small-btn{white-space:nowrap;flex:0 0 auto}
+@media(max-width:520px){
+  .preview-topbar{gap:5px;padding:7px 6px}
+  .preview-back-btn{font-size:11px;padding:8px 9px}
+  .preview-title{font-size:12px}
+  .preview-switch{gap:3px}
+  .preview-switch button{padding:6px 7px;font-size:11px}
+  .preview-topbar .small-btn{padding:7px 8px;font-size:11px}
+}
+
+/* V3.1 FIX: restore the original Mini ChatGPT shell and controls */
+#topbar{background:#0f0f10;min-height:58px;position:relative;z-index:100}
+.project-badge{background:#1a1a1c;border:1px solid #2e2e32;color:#e8e8ea;border-radius:10px;padding:8px 10px;font-size:13px;white-space:nowrap;cursor:pointer}
+.project-badge:active{background:#2a2a2e}
+#inputBar{display:flex;align-items:flex-end;gap:8px;padding:10px 12px max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--bg);flex-shrink:0;position:relative;z-index:80}
+#messageInput{flex:1;min-width:0;max-height:130px;resize:none;overflow-y:auto;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:12px 13px;outline:none;line-height:1.35}
+#messageInput:focus{border-color:#3b8f7b;box-shadow:0 0 0 2px rgba(16,163,127,.12)}
+#fileBtn,#micBtn,#sendBtn{width:48px;height:48px;flex:0 0 48px;border:1px solid var(--border);border-radius:13px;background:var(--surface);color:var(--text);display:flex;align-items:center;justify-content:center;font-size:20px}
+#sendBtn{background:#10a37f;border-color:#10a37f;color:#fff;font-size:24px}
+#sendBtn:disabled{opacity:.45;cursor:not-allowed}
+#fileInput{display:none}
+#fileChip{display:none;align-items:center;gap:7px;margin:0 12px 8px;padding:7px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;font-size:12px;max-width:calc(100% - 24px)}
+#fileName{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#removeFileBtn{background:none;border:0;color:var(--dim);font-size:18px}
+#settingsModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:120;padding:18px;align-items:center;justify-content:center}
+#settingsModal.open{display:flex}
+#settingsModal .modal{width:min(440px,100%);max-height:85vh;overflow:auto;background:#1a1a1c;border:1px solid #34343a;border-radius:16px;padding:18px;box-shadow:0 20px 55px rgba(0,0,0,.55);color:var(--text)}
+#settingsModal h2{font-size:20px;margin-bottom:16px}
+.setting{margin-bottom:16px}.setting label{display:block;color:var(--dim);font-size:12px;margin-bottom:7px}
+#styleSelect{width:100%;background:#232326;color:#e8e8ea;border:1px solid #3a3a40;border-radius:10px;padding:10px;outline:none}
+.modal-actions{display:flex;justify-content:flex-end;margin-top:8px}
+.small-btn.danger{border-color:#6b3035;color:#ff9da4}
+@media(max-width:520px){
+  #topbar{padding:9px 10px;gap:6px}
+  #chatTitle{min-width:0}
+  #v3Badge{display:none}
+  .project-badge{padding:8px 8px;font-size:12px}
+  .tools-toggle{padding:8px 9px}
+  #inputBar{padding-left:8px;padding-right:8px;gap:6px}
+  #fileBtn,#micBtn,#sendBtn{width:46px;height:46px;flex-basis:46px}
+}
+
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <button class="icon-btn" id="historyBtn">☰</button>
+    <div id="chatTitle">New Chat</div><span id="v3Badge" title="V5.1 Professional General-Purpose Builder">V5.1</span>
+    <button class="project-badge" id="projectBadge" title="Current project">🧩 Project</button>
+    <div class="tools-wrap">
+      <button class="tools-toggle" id="toolsToggle" aria-expanded="false">⚡ Tools ▾</button>
+      <div class="tools-menu" id="toolsMenu">
+        <button class="tool-menu-item" id="toolChatBtn">💬 Chat</button>
+        <button class="tool-menu-item" id="toolBuildBtn">🛠️ Build</button>
+        <button class="tool-menu-item" id="architectureBtn">🏗️ Architecture</button>
+        <button class="tool-menu-item" id="fullStackBtn">🚀 Full-Stack</button>
+        <button class="tool-menu-item" id="toolEditBtn">✏️ Edit</button>
+        <button class="tool-menu-item" id="toolReviewBtn">👁️ Review</button>
+        <button class="tool-menu-item" id="toolPreviewBtn">🖥️ Preview</button>
+        <button class="tool-menu-item" id="toolProjectBtn">🧩 Project</button>
+        <button class="tool-menu-item" id="toolRepairBtn">🔧 Repair</button>
+        <button class="tool-menu-item" id="toolExportBtn">📦 Export</button>
+        <div class="tool-menu-divider"></div>
+        <button class="tool-menu-item" id="settingsBtn">⚙️ Settings</button>
+        <button class="tool-menu-item" id="newChatBtn">＋ New Chat</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="historyPanel"></div>
+  <div id="errorBanner"></div>
+  <div id="messages"><div id="emptyState">Ask me anything to get started.</div></div>
+
+  <div id="fileChip">
+    <span id="fileName"></span>
+    <button id="removeFileBtn">×</button>
+  </div>
+
+  <div id="inputBar">
+    <button id="fileBtn" title="Attach text file">📎</button>
+    <textarea id="messageInput" rows="1" placeholder="Message"></textarea>
+    <button id="micBtn" title="Voice input">🎤</button>
+    <button id="sendBtn">➤</button>
+    <input id="fileInput" type="file" accept=".txt,.md,.csv,.json,.js,.css,.html,.htm,.xml,.log,.py,.java,.c,.cpp,.ts,.tsx,.jsx">
+  </div>
+</div>
+
+
+
+<div id="projectManagerModal">
+  <div class="project-manager">
+    <div class="project-manager-head">
+      <h3>🧩 Project Workspace</h3>
+      <button class="small-btn" id="closeProjectManagerBtn">✕</button>
+    </div>
+    <div class="project-manager-actions">
+      <button class="small-btn" id="saveProjectBtn">💾 Save Current</button>
+      <button class="small-btn" id="renameProjectBtn">✏️ Rename</button>
+      <button class="small-btn" id="projectInstructionsBtn">🧠 Instructions</button>
+    </div>
+    <div class="project-list" id="projectList"></div>
+  </div>
+</div>
+
+<div id="previewModal">
+  <div class="preview-topbar">
+    <button id="previewBackBtn" type="button" class="preview-back-btn">← Back to Editor</button>
+    <div class="preview-title">👁️ Live Preview</div>
+    <div class="preview-switch">
+      <button id="previewBeforeBtn">Before</button>
+      <button id="previewAfterBtn" class="active">After</button>
+    </div>
+    <button class="small-btn" id="improvePreviewBtn">✨ Improve</button>
+    <button class="small-btn" id="reloadPreviewBtn">↻ Reload</button>
+  </div>
+  <div class="preview-frame-wrap">
+    <iframe id="previewFrame" sandbox="allow-scripts allow-forms allow-modals allow-same-origin allow-popups allow-downloads"></iframe>
+  </div>
+  <div class="preview-note">Preview runs inside a sandboxed browser frame. It does not change your website files. Tip: if something looks wrong, tap ✨ Improve and tell the AI what to fix.</div>
+</div>
+
+<div id="settingsModal">
+  <div class="modal">
+    <h2>AI Settings</h2>
+    <div class="setting">
+      <label for="styleSelect">Assistant style</label>
+      <select id="styleSelect">
+        <option value="normal">Normal</option>
+        <option value="concise">Concise</option>
+        <option value="detailed">Detailed</option>
+        <option value="coding">Coding</option>
+        <option value="trading">Trading Assistant</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label>Current chat</label>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="small-btn" id="shareChatBtn">Share chat</button>
+        <button class="small-btn" id="downloadChatBtn">Download .txt</button>
+      </div>
+    </div>
+    <div class="setting">
+      <label>Local data</label>
+      <button class="small-btn danger" id="clearAllBtn">Delete all saved chats</button>
+    </div>
+    <div class="modal-actions">
+      <button class="small-btn" id="closeSettingsBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY='mini-chatgpt-conversations-v2';
+const SETTINGS_KEY='mini-chatgpt-settings-v1';
+
+let conversations=[];
+let activeId=null;
+let loading=false;
+let attachedFile=null;
+let recognition=null;
+let isRecording=false;
+let codeMode=false;
+let currentPreviewCode='';
+let previousPreviewCode='';
+let projectInstructions='';
+
+function projectLibraryKey(){return 'MINI_CHATGPT_PROJECT_LIBRARY_V1'}
+function loadProjectLibrary(){try{return JSON.parse(localStorage.getItem(projectLibraryKey())||'[]')}catch{return[]}}
+function saveProjectLibrary(list){try{localStorage.setItem(projectLibraryKey(),JSON.stringify(list))}catch{}}
+
+function currentProjectTitle(){
+  const a=getActive();
+  return (a&&a.title&&a.title!=='New Chat')?a.title:'Untitled Project';
+}
+
+function saveCurrentProjectToLibrary(){
+  const code=getProjectCode();
+  if(!code){showError('No current project to save. Build a project first.');setTimeout(hideError,2200);return}
+  const list=loadProjectLibrary();
+  const name=prompt('Project name:',currentProjectTitle());
+  if(!name)return;
+  const now=new Date().toISOString();
+  const existing=list.find(p=>p.name.toLowerCase()===name.trim().toLowerCase());
+  const item={id:existing?.id||Date.now().toString(),name:name.trim(),code,updatedAt:now,instructions:projectInstructions};
+  if(existing)Object.assign(existing,item);else list.unshift(item);
+  saveProjectLibrary(list);
+  renderProjectList();
+  showError('Project saved: '+item.name);setTimeout(hideError,1800);
+}
+
+function loadProjectFromLibrary(id){
+  const item=loadProjectLibrary().find(p=>p.id===id);
+  if(!item)return;
+  setProjectCode(item.code);
+  projectInstructions=item.instructions||'';
+  const active=getActive();
+  if(active)active.title=item.name;
+  saveConversations();render();
+  $('projectManagerModal').classList.remove('open');
+  showError('Loaded project: '+item.name);setTimeout(hideError,1800);
+}
+
+function deleteProjectFromLibrary(id){
+  const item=loadProjectLibrary().find(p=>p.id===id);
+  if(!item)return;
+  if(!confirm('Delete saved project "'+item.name+'"?'))return;
+  saveProjectLibrary(loadProjectLibrary().filter(p=>p.id!==id));
+  renderProjectList();
+}
+
+function renderProjectList(){
+  const box=$('projectList');if(!box)return;
+  const list=loadProjectLibrary();
+  if(!list.length){box.innerHTML='<div class="project-item"><div class="project-item-info"><div class="project-item-title">No saved projects yet</div><div class="project-item-meta">Save your current project to keep multiple projects on this phone.</div></div></div>';return}
+  box.innerHTML='';
+  list.forEach(p=>{
+    const row=document.createElement('div');row.className='project-item';
+    const info=document.createElement('div');info.className='project-item-info';
+    const title=document.createElement('div');title.className='project-item-title';title.textContent=p.name;
+    const meta=document.createElement('div');meta.className='project-item-meta';meta.textContent='Updated '+new Date(p.updatedAt).toLocaleString();
+    info.append(title,meta);
+    const load=document.createElement('button');load.textContent='Open';load.onclick=()=>loadProjectFromLibrary(p.id);
+    const del=document.createElement('button');del.textContent='Delete';del.onclick=()=>deleteProjectFromLibrary(p.id);
+    row.append(info,load,del);box.appendChild(row);
+  });
+}
+
+function openProjectManager(){
+  renderProjectList();
+  $('projectManagerModal').classList.add('open');
+}
+
+function saveProjectInstructions(){
+  const value=prompt('Project instructions for the AI (for example: "This is a forex calculator. Never remove the risk calculation.")',projectInstructions||'');
+  if(value===null)return;
+  projectInstructions=value.trim();
+  const active=getActive();if(active)active.projectInstructions=projectInstructions;
+  saveConversations();
+  showError('Project instructions saved.');setTimeout(hideError,1800);
+}
+
+
+const $=id=>document.getElementById(id);
+const messagesEl=$('messages');
+const historyPanel=$('historyPanel');
+const chatTitle=$('chatTitle');
+const errorBanner=$('errorBanner');
+const input=$('messageInput');
+const sendBtn=$('sendBtn');
+const micBtn=$('micBtn');
+const fileInput=$('fileInput');
+const fileChip=$('fileChip');
+const fileName=$('fileName');
+const fileBtn=$('fileBtn');
+const removeFileBtn=$('removeFileBtn');
+const previewModal=$('previewModal');
+const previewFrame=$('previewFrame');
+const settingsModal=$('settingsModal');
+
+function loadConversations(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]')}catch{return[]}}
+function saveConversations(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(conversations))}catch{}}
+function newConversation(){return{id:Date.now().toString()+Math.random().toString(36).slice(2),title:'New Chat',messages:[],fileContext:null,projectCode:null,projectInstructions:''}}
+function getActive(){return conversations.find(c=>c.id===activeId)}
+function getSettings(){try{return JSON.parse(localStorage.getItem(SETTINGS_KEY)||'{"style":"normal"}')}catch{return{style:'normal'}}}
+function saveSettings(s){localStorage.setItem(SETTINGS_KEY,JSON.stringify(s))}
+function showError(msg){errorBanner.textContent=msg;errorBanner.style.display='block'}
+function getProjectCode(){
+  const active=getActive();
+  projectInstructions=active&&active.projectInstructions?String(active.projectInstructions):projectInstructions;
+  return active&&active.projectCode?String(active.projectCode):'';
+}
+function setProjectCode(code){
+  const active=getActive();
+  if(!active)return;
+  active.projectCode=code||null;
+  saveConversations();
+  updateProjectBadge();
+}
+function updateProjectBadge(){
+  const badge=$('projectBadge');
+  if(!badge)return;
+  const has=!!getProjectCode();
+  badge.classList.toggle('active',has);
+  badge.textContent=has?'🧩 Project loaded':'🧩 Project';
+}
+
+function hideError(){errorBanner.style.display='none'}
+
+$('projectBadge').onclick=()=>{
+  if(!getProjectCode())return;
+  if(confirm('Clear the current project from this chat?')){
+    setProjectCode('');
+    showError('Current project cleared. Your chat history is still safe.');
+    setTimeout(hideError,2200);
+  }
+};
+
+function cleanMath(text){
+  let out = String(text || '');
+
+  // Convert common LaTeX-style math into clean plain text. This is intentional:
+  // the chat is mobile-first, so equations should remain readable everywhere.
+  out = out.replace(/\$\$([\s\S]*?)\$\$/g, '$1');
+  out = out.replace(/\\\[([\s\S]*?)\\\]/g, '$1');
+  out = out.replace(/\\\(([\s\S]*?)\\\)/g, '$1');
+  out = out.replace(/\$([^$\n]+)\$/g, '$1');
+
+  // Remove text/textbf wrappers, including the common simple cases.
+  for(let i=0;i<3;i++){
+    out = out.replace(/\\textbf\s*\{([^{}]*)\}/g, '$1');
+    out = out.replace(/\\text\s*\{([^{}]*)\}/g, '$1');
+    out = out.replace(/\\mathrm\s*\{([^{}]*)\}/g, '$1');
+  }
+
+  out = out
+    .replace(/\\times/g, ' × ')
+    .replace(/\\cdot/g, ' · ')
+    .replace(/\\div/g, ' ÷ ')
+    .replace(/\\pm/g, ' ± ')
+    .replace(/\\leq/g, ' ≤ ')
+    .replace(/\\geq/g, ' ≥ ')
+    .replace(/\\neq/g, ' ≠ ')
+    .replace(/\\%/g, '%')
+    .replace(/\\left/g, '')
+    .replace(/\\right/g, '')
+    .replace(/\\,/g, ' ')
+    .replace(/\\!/g, '')
+    .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '($1 ÷ $2)')
+    .replace(/\\sqrt\s*\{([^{}]*)\}/g, '√($1)')
+    .replace(/\\[a-zA-Z]+/g, '')
+    .replace(/[{}]/g, '');
+
+  // Gemini occasionally emits doubled currency symbols around a formula.
+  out = out.replace(/₦{2,}/g, '₦');
+  out = out.replace(/[ \t]{2,}/g, ' ');
+  return out;
+}
+
+function renderMarkdown(text){
+  try{return DOMPurify.sanitize(marked.parse(cleanMath(text),{breaks:true,gfm:true}))}
+  catch{const d=document.createElement('div');d.textContent=cleanMath(text);return d.innerHTML.replace(/\n/g,'<br>')}
+}
+
+
+function copyText(text,btn,label='Copy'){
+  if(navigator.clipboard) navigator.clipboard.writeText(text).catch(()=>{});
+  btn.textContent='Copied!';
+  setTimeout(()=>btn.textContent=label,1400);
+}
+
+
+function isPreviewableCode(code,lang){
+  const l=(lang||'').toLowerCase();
+  if(['html','htm'].includes(l))return true;
+  return /<!doctype\s+html|<html[\s>]|<body[\s>]|<style[\s>]|<script[\s>]/i.test(code||'');
+}
+
+
+function injectV3VisualSafety(doc){
+  const visualCSS = `
+    html,body{width:100%!important;max-width:100vw!important;min-width:0!important;overflow-x:hidden!important;margin:0!important}
+    *,*::before,*::after{box-sizing:border-box}
+    img,video,svg,canvas{display:block;max-width:100%!important;height:auto!important}
+    img[width],video[width],svg[width],canvas[width]{max-width:100%!important}
+    table{max-width:100%!important;width:100%!important;border-collapse:collapse}
+    pre{max-width:100%!important;overflow-x:auto!important}
+    input,select,textarea{min-width:0!important;max-width:100%!important;font:inherit}
+    picture{display:block;max-width:100%}
+    iframe{max-width:100%;border:0}
+    a{overflow-wrap:anywhere}
+    main,header,footer,nav,section,article,aside{max-width:100%}
+    @media(max-width:600px){
+      body{font-size:15px;overflow-x:hidden}
+      h1{font-size:clamp(1.8rem,8vw,3rem);line-height:1.08}
+      h2{font-size:clamp(1.35rem,6vw,2.1rem);line-height:1.15}
+      button,input,select,textarea{max-width:100%}
+      button{min-height:42px}
+    }
+  `;
+
+  // Do not overwrite a good generated design. Only add a small safety layer.
+  const hasHead=/<head[^>]*>/i.test(doc);
+  const hasRealStyle=/<style[^>]*>[\s\S]{120,}<\/style>/i.test(doc);
+  const hasTailwindOrFrameworkClasses=/(?:class|className)=["'][^"']*(?:bg-|text-|flex|grid|rounded-|shadow-|p-|px-|py-|m-|mx-|my-|gap-|items-|justify-)[^"']*["']/i.test(doc);
+  const fallbackCSS = !hasRealStyle ? `
+    <style id="mini-chatgpt-preview-fallback">
+      :root{--mc-primary:#2563eb;--mc-accent:#7c3aed;--mc-bg:#f8fafc;--mc-surface:#fff;--mc-text:#0f172a;--mc-muted:#64748b;--mc-border:#e2e8f0}
+      html,body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--mc-bg);color:var(--mc-text);line-height:1.55}
+      body{padding:0;margin:0}
+      header,nav{padding:14px 16px}
+      main,section,article,footer{width:100%;max-width:1100px;margin-left:auto;margin-right:auto}
+      main,section,article{padding:18px 16px}
+      h1,h2,h3{color:var(--mc-text);letter-spacing:-.02em}
+      p{color:#334155}
+      a{color:var(--mc-primary);font-weight:600}
+      button{appearance:none;border:0;border-radius:12px;padding:.72rem 1rem;background:linear-gradient(135deg,var(--mc-primary),var(--mc-accent));color:#fff;font-weight:700;box-shadow:0 6px 18px rgba(37,99,235,.20)}
+      button:active{transform:translateY(1px)}
+      input,select,textarea{border:1px solid var(--mc-border);border-radius:11px;padding:.72rem .8rem;background:#fff;color:var(--mc-text)}
+      img{max-width:100%;height:auto}
+      [hidden]{display:none!important}
+      @media(max-width:600px){main,section,article{padding:16px 14px}button{min-height:44px}}
+    </style>` : '';
+
+  let extra=visualCSS;
+  if(hasHead){
+    let result=doc.replace(/<\/head>/i, `<style id="v3-visual-safety">${extra}</style>${fallbackCSS}</head>`);
+    return result;
+  }
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">${fallbackCSS}<style id="v3-visual-safety">${extra}</style></head><body>${doc}</body></html>`;
+}
+
+function injectV5PreviewRuntime(doc){
+  const runtime = `
+<script id="mini-chatgpt-preview-runtime">
+(function(){
+  'use strict';
+  function toast(msg){
+    try{
+      var t=document.getElementById('__mcgpt_preview_toast');
+      if(!t){
+        t=document.createElement('div');
+        t.id='__mcgpt_preview_toast';
+        t.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483647;background:rgba(15,23,42,.96);color:#fff;padding:10px 14px;border-radius:11px;font:600 13px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.25);max-width:calc(100vw - 28px);text-align:center;display:none;pointer-events:none';
+        (document.body||document.documentElement).appendChild(t);
+      }
+      t.textContent=msg;t.style.display='block';clearTimeout(t.__timer);t.__timer=setTimeout(function(){t.style.display='none'},1800);
+    }catch(e){}
+  }
+  function findTarget(el){
+    var ref=el.getAttribute('data-target')||el.getAttribute('aria-controls')||el.getAttribute('data-section');
+    if(!ref)return null;
+    if(ref.charAt(0)==='#')ref=ref.slice(1);
+    try{return document.getElementById(ref)||document.querySelector(ref)}catch(e){return null}
+  }
+  function toggleTarget(target){
+    if(!target)return false;
+    var hidden=target.hasAttribute('hidden')||getComputedStyle(target).display==='none';
+    target.toggleAttribute('hidden',!hidden);
+    if(hidden){target.style.display='';if(getComputedStyle(target).display==='none')target.style.display='block'}
+    else target.style.display='none';
+    return true;
+  }
+  function rescueButton(btn){
+    if(!btn)return false;
+    var target=findTarget(btn);
+    if(target){toggleTarget(target);return true;}
+    var aria=btn.getAttribute('aria-expanded');
+    if(aria!==null){
+      var t=findTarget(btn);
+      if(t){var open=aria!=='true';btn.setAttribute('aria-expanded',String(open));toggleTarget(t);return true;}
+    }
+    var text=(btn.textContent||'').trim().toLowerCase();
+    var menuLike=/^(menu|☰|open menu|close menu|navigation|nav)$/.test(text)||/menu/.test(btn.className||'');
+    if(menuLike){
+      var nav=document.querySelector('nav,[role="navigation"],[data-menu]');
+      if(nav){toggleTarget({hasAttribute:function(){return false},toggleAttribute:function(){},style:{},});return toggleTarget(nav);}
+    }
+    return false;
+  }
+
+  document.addEventListener('click',function(e){
+    var a=e.target.closest?e.target.closest('a'):null;
+    if(a){
+      var href=a.getAttribute('href')||'';
+      if(href.charAt(0)==='#'){
+        var target=document.getElementById(href.slice(1));
+        if(target){e.preventDefault();target.scrollIntoView({behavior:'smooth',block:'start'});return;}
+        e.preventDefault();toast('Section not available in this preview.');return;
+      }
+      if(!href || href.toLowerCase().startsWith('javascript:')){
+        e.preventDefault();toast('Link is ready for an action.');return;
+      }
+      if(/^https?:\/\//i.test(href)){
+        e.preventDefault();
+        // Keep the preview on screen. A real production URL can be used after deployment.
+        toast('External link is disabled inside Preview.');
+        return;
+      }
+    }
+
+    var btn=e.target.closest?e.target.closest('button,[role="button"],input[type="button"],input[type="submit"]'):null;
+    if(btn){
+      // Let the page's own handler run. If it has no target/obvious built-in behavior,
+      // provide visible feedback rather than leaving a dead-looking control.
+      var handled=rescueButton(btn);
+      setTimeout(function(){
+        if(!handled && !e.defaultPrevented && btn.tagName==='BUTTON' && btn.type!=='submit') toast('Button clicked.');
+      },30);
+    }
+  },true);
+
+  document.addEventListener('submit',function(e){
+    var form=e.target;if(!form||!form.getAttribute)return;
+    var action=form.getAttribute('action')||'';
+    if(!action || action==='#' || /^https?:\/\//i.test(action)){
+      e.preventDefault();toast('Form submitted in Preview mode.');
+    }
+  },true);
+
+  // Convert common broken external images into a harmless fallback instead of a broken layout.
+  document.addEventListener('error',function(e){
+    var el=e.target;
+    if(el&&el.tagName==='IMG'){
+      el.style.display='none';
+      var parent=el.parentElement;
+      if(parent&&!parent.querySelector('.__mcgpt_img_fallback')){
+        var d=document.createElement('div');d.className='__mcgpt_img_fallback';
+        d.textContent='Image unavailable in Preview';
+        d.style.cssText='min-height:120px;display:grid;place-items:center;background:linear-gradient(135deg,#e2e8f0,#cbd5e1);color:#475569;border-radius:12px;font:600 13px system-ui,sans-serif';
+        parent.appendChild(d);
+      }
+    }
+  },true);
+
+  window.addEventListener('error',function(e){
+    // Surface actual page errors through a small toast but do not break the rest of the preview.
+    try{if(e&&e.message)toast('Preview error: '+e.message.slice(0,100));}catch(_){ }
+  });
+})();
+<\/script>`;
+  if(/<\/body>/i.test(doc)) return doc.replace(/<\/body>/i, runtime+'</body>');
+  return doc + runtime;
+}
+
+function buildPreviewDocument(code){
+  const source=String(code||'').trim();
+  if(!source)return '';
+  if(/<!doctype\s+html|<html[\s>]/i.test(source))return injectV5PreviewRuntime(injectV3VisualSafety(source));
+  if(/<style[\s>]|<script[\s>]|<[a-z][\s\S]*>/i.test(source)){
+    return injectV5PreviewRuntime(injectV3VisualSafety('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;min-height:100%;font-family:Arial,sans-serif}</style></head><body>'+source+'</body></html>'));
+  }
+  return '';
+}
+
+
+function extractBestHtmlCode(text){
+  const source=String(text||'');
+  const fenced=[...source.matchAll(/```(?:html?|htm)?\s*([\s\S]*?)```/gi)]
+    .map(m=>m[1].trim())
+    .filter(c=>isPreviewableCode(c,'html'));
+  if(fenced.length)return fenced.sort((a,b)=>b.length-a.length)[0];
+
+  // V5 fallback: if the model forgot code fences, recover a complete HTML document.
+  const full=source.match(/<!doctype\s+html[\s\S]*<\/html>/i);
+  if(full && isPreviewableCode(full[0],'html'))return full[0].trim();
+  const htmlBlock=source.match(/<html[\s\S]*<\/html>/i);
+  if(htmlBlock && isPreviewableCode(htmlBlock[0],'html'))return htmlBlock[0].trim();
+  return '';
+}
+
+function rememberLatestGeneratedProject(text){
+  const code=extractBestHtmlCode(text);
+  if(code){
+    const doc=buildPreviewDocument(code);
+    if(doc)setProjectCode(doc);
+  }
+  return code;
+}
+
+function openPreview(code){
+  const doc=buildPreviewDocument(code);
+  if(!doc){
+    showError('Preview works with HTML/HTML fragments. Ask me to generate a complete HTML page first.');
+    return;
+  }
+  if(currentPreviewCode && currentPreviewCode!==doc) previousPreviewCode=currentPreviewCode;
+  currentPreviewCode=doc;
+  setProjectCode(doc);
+  const frame=$('previewFrame');
+  frame.onload=()=>{
+    try{
+      frame.contentWindow.addEventListener('error',e=>{
+        showError('Preview JavaScript error: '+(e.message||'Unknown error'));
+      });
+      frame.contentWindow.addEventListener('unhandledrejection',e=>{
+        showError('Preview error: '+(e.reason?.message||e.reason||'Unhandled promise rejection'));
+      });
+    }catch{}
+  };
+  frame.srcdoc=doc;
+  $('previewModal').classList.add('open');
+}
+
+function closePreview(){
+  $('previewModal').classList.remove('open');
+  $('previewFrame').srcdoc='';
+  currentPreviewCode=getProjectCode();
+  setTimeout(()=>{try{$('messageInput').focus()}catch{}},50);
+}
+
+function enhanceCodeBlocks(container){
+  container.querySelectorAll('pre').forEach(pre=>{
+    if(pre.parentElement.classList.contains('code-block-wrapper'))return;
+    const code=pre.querySelector('code');if(!code)return;
+    const match=(code.className||'').match(/language-(\w+)/);
+    const wrapper=document.createElement('div');wrapper.className='code-block-wrapper';
+    const header=document.createElement('div');header.className='code-block-header';
+    const lang=document.createElement('span');lang.className='code-block-lang';lang.textContent=match?match[1]:'code';
+    const btn=document.createElement('button');btn.className='code-copy-btn';btn.textContent='Copy';
+    btn.onclick=()=>copyText(code.textContent||'',btn,'Copy');
+    header.append(lang,btn);
+    const rawCode=code.textContent||'';
+    if(isPreviewableCode(rawCode,match?match[1]:'')){
+      const preview=document.createElement('button');
+      preview.className='code-preview-btn';
+      preview.textContent='Preview';
+      preview.onclick=()=>openPreview(rawCode);
+      header.appendChild(preview);
+    }
+    pre.parentNode.insertBefore(wrapper,pre);
+    wrapper.append(header,pre);
+  });
+}
+
+function addResponseTools(row,content){
+  const tools=document.createElement('div');tools.className='response-tools';
+  const copy=document.createElement('button');copy.className='response-btn';copy.textContent='Copy response';
+  copy.onclick=()=>copyText(content,copy,'Copy response');
+  const speak=document.createElement('button');speak.className='response-btn';speak.textContent='🔊 Read';
+  speak.onclick=()=>speakText(content);
+  const share=document.createElement('button');share.className='response-btn';share.textContent='Share';
+  share.onclick=()=>shareText(content);
+  tools.append(copy,speak,share);row.appendChild(tools);
+}
+
+function render(){
+  const active=getActive();
+  chatTitle.textContent=active?active.title:'Mini ChatGPT';
+  updateProjectBadge();
+  messagesEl.innerHTML='';
+  if(!active||!active.messages.length){
+    const empty=document.createElement('div');empty.id='emptyState';empty.textContent='Ask me anything to get started.';messagesEl.appendChild(empty);
+  }else{
+    active.messages.forEach(m=>{
+      const row=document.createElement('div');row.className='message-row '+(m.role==='user'?'user':'assistant');
+      const bubble=document.createElement('div');bubble.className='bubble '+(m.role==='user'?'user':'assistant');
+      if(m.role==='user'){
+        bubble.textContent=m.content;row.appendChild(bubble);
+        if(m.attachmentName){const n=document.createElement('div');n.className='attachment-note';n.textContent='📎 '+m.attachmentName;row.appendChild(n)}
+      }else{
+        bubble.innerHTML=renderMarkdown(m.content);enhanceCodeBlocks(bubble);row.appendChild(bubble);
+        if(m.content)addResponseTools(row,m.content);
+      }
+      messagesEl.appendChild(row);
+    });
+  }
+  if(loading){
+    const row=document.createElement('div');row.className='message-row assistant';
+    const t=document.createElement('div');t.className='typing';t.innerHTML='<span></span><span></span><span></span>';row.appendChild(t);messagesEl.appendChild(row);
+  }
+  messagesEl.scrollTop=messagesEl.scrollHeight;
+  renderHistory();
+  sendBtn.disabled=loading||!input.value.trim();
+}
+
+function renderHistory(filter=''){
+  historyPanel.innerHTML='';
+  const searchWrap=document.createElement('div');searchWrap.className='history-search';
+  const search=document.createElement('input');search.placeholder='Search chats…';search.value=filter;
+  search.oninput=()=>renderHistory(search.value);
+  searchWrap.appendChild(search);historyPanel.appendChild(searchWrap);
+  const q=filter.toLowerCase();
+  conversations.filter(c=>!q||c.title.toLowerCase().includes(q)||c.messages.some(m=>m.content.toLowerCase().includes(q))).forEach(c=>{
+    const item=document.createElement('div');item.className='history-item '+(c.id===activeId?'active':'');
+    const name=document.createElement('span');name.className='history-name';name.textContent=c.title;
+    name.onclick=()=>{activeId=c.id;historyPanel.classList.remove('open');hideError();render()};
+    const actions=document.createElement('div');actions.className='history-actions';
+    const rename=document.createElement('button');rename.textContent='Rename';
+    rename.onclick=()=>{const n=prompt('Chat name:',c.title);if(n&&n.trim()){c.title=n.trim();saveConversations();renderHistory(q)}};
+    const del=document.createElement('button');del.textContent='Delete';
+    del.onclick=()=>{if(confirm('Delete this chat?')){conversations=conversations.filter(x=>x.id!==c.id);if(activeId===c.id){if(!conversations.length){const n=newConversation();conversations.push(n)}activeId=conversations[0].id}saveConversations();render()}};
+    actions.append(rename,del);item.append(name,actions);historyPanel.appendChild(item);
+  });
+}
+
+function speakText(text){
+  if(!('speechSynthesis' in window)){showError('Read aloud is not supported by this browser.');return}
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text.replace(/[*_`#]/g,''));
+  u.rate=1;u.pitch=1;speechSynthesis.speak(u);
+}
+
+async function shareText(text){
+  try{
+    if(navigator.share) await navigator.share({title:'Mini ChatGPT response',text});
+    else await navigator.clipboard.writeText(text);
+  }catch{}
+}
+
+async function shareConversation(){
+  const c=getActive();if(!c)return;
+  const text=c.messages.map(m=>(m.role==='user'?'You':'Gemini')+': '+m.content).join('\n\n');
+  await shareText(text);
+}
+
+function downloadConversation(){
+  const c=getActive();if(!c)return;
+  const text=c.messages.map(m=>(m.role==='user'?'You':'Gemini')+': '+m.content).join('\n\n');
+  const blob=new Blob([text],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=(c.title||'chat').replace(/[^\w\-]+/g,'_')+'.txt';a.click();URL.revokeObjectURL(a.href);
+}
+
+
+
+const V5_BUILDER_RULES = `
+V5 PROFESSIONAL GENERAL-PURPOSE BUILDER RULES
+
+You are a general-purpose product builder and software architect. Do not specialize the builder around trading. The user may ask for ecommerce, SaaS, dashboards, education, booking, finance, media, AI tools, portfolios, social apps, internal tools, calculators, or other legitimate web applications.
+
+When the user asks to build or modify a website or web app:
+1. Understand the product and its main user flows before implementation.
+2. Decide whether the request is frontend-only or needs backend capabilities.
+3. For serious/full-stack products account for frontend UI, backend/API routes, database schema, authentication/session management, authorization/roles, third-party APIs, external services, environment variables, validation, error handling, deployment, and responsive behavior as applicable.
+4. Never pretend simulated payments, databases, authentication, email, or external APIs are real. Clearly mark production integration boundaries when credentials or a server are required.
+5. Never expose private API keys, database passwords, payment secret keys, or service credentials in browser code.
+6. Preserve existing working features when editing an existing project. Do not replace a working interface unnecessarily.
+7. If the current preview can only execute a self-contained HTML file, make the preview functional within that limitation and clearly separate production backend pieces that must run on a server.
+8. Do not add unnecessary infrastructure. Use only what the requested product needs.
+9. Every visible button, form, navigation item, modal, dropdown, search control, filter, calculator action, and important interaction must work or have a clearly implemented integration boundary.
+10. Before returning a build, check obvious JavaScript/runtime errors, missing selectors/functions, broken interactions, horizontal overflow, and mobile layout problems.
+11. Keep the visual design professional: intentional color palette, typography, spacing, responsive layout, interactive states, cards/sections where appropriate, and suitable imagery. Avoid default unstyled browser controls unless the user explicitly asks for them.
+12. Keep the builder domain-neutral. Trading is only one possible project type, not the default.
+13. When the user says "build", "create", "make", or "generate", produce an actual implementation rather than only describing what could be built.
+14. For previewable web projects, prefer one complete self-contained HTML document containing HTML, CSS, and JavaScript so the current Mini ChatGPT preview can run it immediately.
+15. Use a professional design direction chosen from the product context. Do not reuse the same color palette, hero layout, card style, or typography for every project.
+16. Build a complete first-screen experience: polished header/navigation, strong hero or primary workspace, clear primary action, useful content sections, and a finished footer when appropriate.
+17. Use realistic project-specific copy, labels, sample data, and imagery. Do not use lorem ipsum or unexplained placeholder boxes.
+18. Images must be responsive: max-width:100%, height:auto or a controlled object-fit container, and never force horizontal scrolling.
+18A. For Preview, keep all essential CSS and JavaScript inside the single HTML document. Do NOT rely on Tailwind CDN, Bootstrap CDN, external CSS files, external JavaScript libraries, module imports, remote fonts, or icon CDNs for the core design or interactions.
+18B. If an external service is useful for production, make the Preview version work locally first; external services must never be required just to see the design or click basic controls.
+19. Every important interaction must visibly change state: menus open/close, tabs switch, forms validate, buttons update content, cart counters change, filters/search update results, and modals close/open.
+20. If an external API, database, authentication provider, payment provider, email service, storage service, or server is required, implement the frontend integration boundary and clearly identify the server-side configuration needed. Never put secrets in client code.
+21. Before returning code, perform a build checklist: no missing element IDs, no undefined event handlers, no obvious syntax errors, no accidental horizontal overflow, mobile layout works around 360px wide, and the main user flow is wired.
+22. When editing an existing project, make targeted changes and preserve working functionality. Do not redesign unrelated sections unless the user asks for a redesign.
+23. If the user asks for a full-stack system but the current preview is browser-only, provide the best runnable frontend preview plus a clear production architecture boundary instead of pretending browser-only code is a complete backend.
+24. When returning a code build, put the complete implementation in a single fenced HTML block when a self-contained preview is appropriate. Avoid returning fragments that require the user to guess where they belong.
+`;
+
+const V3_VISUAL_DESIGN_RULES = `
+VISUAL DESIGN REQUIREMENTS:
+- Unless the user explicitly requests a plain/minimal monochrome design, NEVER default to a generic white-and-black website.
+- Every generated website must have an intentional visual design system: suitable color palette, typography hierarchy, spacing, cards/containers where appropriate, and clear visual hierarchy.
+- Choose colors based on the project's purpose and brand rather than using the same palette every time.
+- Use tasteful gradients, colored backgrounds, accent colors, borders, shadows, icons/illustrations, badges, or other visual elements when appropriate.
+- Make primary calls-to-action visually prominent and give interactive controls hover/focus/active states.
+- Make the result look like a deliberately designed professional product, not a bare HTML wireframe.
+- Keep contrast/accessibility in mind and make layouts responsive for phones and larger screens.
+`;
+
+const V3_ARCHITECTURE_RULES = `
+
+PROFESSIONAL UI / UX RENDERING STANDARD — V3.1
+
+When generating a website, do not treat "working" as enough. The result must also look intentionally designed.
+
+VISUAL SYSTEM:
+- Start by choosing a visual direction that matches the project: premium, fintech, SaaS, ecommerce, portfolio, restaurant, education, social, dashboard, etc.
+- Define a small design system with CSS variables for primary, secondary/accent, background, surface, text, muted text, border and success/danger colors.
+- Use 1 primary accent + 1 supporting accent. Avoid random rainbow colors.
+- Use modern system fonts or a sensible web-safe stack. Do not rely on browser-default Times New Roman styling.
+- Use consistent spacing, border radii, shadows and typography throughout the page.
+- Use visual hierarchy: eyebrow/label → headline → supporting text → primary CTA.
+- Use cards, sections, badges, dividers, chips, tabs, grids or other UI patterns when they make sense.
+- Buttons must look like designed UI controls, not browser-default buttons.
+- Links and navigation should look intentional and have hover/focus states.
+- Forms should look polished with labels, inputs, validation states and clear submit/cancel actions.
+- Use subtle gradients, glass effects, soft backgrounds or shadows when appropriate, but do not overdo them.
+- Use real imagery when the concept benefits from it. Use responsive image handling and object-fit so images never break the layout.
+- Do not make the entire page white with black text unless the user explicitly requests a minimalist monochrome design.
+
+MOBILE-FIRST RENDERING:
+- Design first for 360px–430px wide phones, then enhance for tablets/desktop.
+- Never create horizontal page scrolling.
+- Keep the main content inside a responsive max-width container.
+- Use CSS Grid/Flexbox with wrapping and responsive breakpoints.
+- Images, cards, tables and media must shrink or reflow instead of overflowing.
+- Avoid giant fixed widths/heights.
+- Hero sections must fit comfortably on a phone without forcing important content off-screen.
+- Navigation must collapse into a mobile menu when necessary.
+- Buttons should have comfortable touch targets (about 42px or larger) and must not become wider than the screen.
+- Do not place too many controls in a single row on small screens.
+
+POLISH:
+- Add hover, focus and active states to interactive controls.
+- Add empty states, success/error feedback and loading states where relevant.
+- Use micro-interactions sparingly: button press, card hover, menu transitions, modal transitions.
+- Make the first screen visually strong; do not leave large empty areas unless intentional.
+- Use realistic sample content rather than lorem ipsum when the user gives a business/project concept.
+- For ecommerce, use product cards, prices, CTAs, badges, categories and a visually strong hero.
+- For dashboards, use KPI cards, charts/visual summaries, clear sections and responsive tables.
+- For landing pages, use a strong hero, benefits/features, social proof, CTA and footer.
+- For tools/apps, prioritize clear workflows, usable controls and visible state changes.
+
+FINAL SELF-CHECK:
+Before returning the generated code, verify:
+1. The page has a deliberate color palette.
+2. It does not look like raw browser HTML.
+3. Buttons are visibly designed and functional.
+4. Images fit inside the viewport.
+5. No section causes horizontal overflow.
+6. Mobile layout works at roughly 360px width.
+7. Desktop layout expands gracefully.
+8. The main action is obvious.
+9. Navigation and important controls are usable.
+10. The page feels like a finished product, not a coding exercise.
+
+MINI CHATGPT V3.1 — GENERAL-PURPOSE FULL-STACK BUILDER
+
+You are a general-purpose AI software architect and web application builder.
+Do NOT specialize the builder around trading. Trading is only one possible project.
+
+When a user asks to build or upgrade a website/application:
+1. Understand the requirements before coding.
+2. Decide which architecture the project actually needs.
+3. Keep simple projects simple. Do not add unnecessary infrastructure.
+4. For serious applications, support these layers when required:
+   - FRONTEND: responsive mobile/desktop UI.
+   - BACKEND: server-side business logic and API routes.
+   - DATABASE: persistent application data.
+   - AUTHENTICATION: signup, login, logout, sessions, protected routes and roles when needed.
+   - APIS: internal and external API integrations.
+   - EXTERNAL SERVICES: payments, email, file storage, notifications, maps, analytics, AI services, market-data services, etc.
+   - TESTING/REPAIR: verify important flows and repair errors.
+   - DEPLOYMENT: clearly identify hosting and environment-variable requirements.
+
+SECURITY:
+- Never put private API keys, database passwords, payment secrets, or other credentials in browser/client code.
+- Use server-side environment variables for secrets.
+- Do not invent credentials.
+- If a required external service is unavailable, create the integration boundary and clearly state what configuration/credential is required.
+- Do not claim a frontend-only demo is a production backend.
+- Never store sensitive passwords insecurely in localStorage.
+
+PROJECT GENERATION:
+- For a simple site, a self-contained HTML/CSS/JavaScript project is acceptable.
+- For a full-stack application, describe and generate the appropriate project structure, including frontend, backend/API routes, database/auth integration, environment variables, and setup instructions as needed.
+- Preserve existing working features when editing a project unless the user explicitly asks to remove them.
+- Every visible interactive control must have a real action.
+- Test the main user flow mentally before returning code.
+- Keep the builder domain-neutral: restaurants, stores, finance, education, social apps, dashboards, AI tools, trading tools, booking systems and other legitimate applications are all valid project types.
+
+ARCHITECTURE RESPONSE:
+When the user asks for a serious/full-stack project, first give a concise architecture plan and then build it when appropriate.
+If the user asks for "build it", do not stop at a vague plan: generate the actual project code/structure that can be produced in the current environment.
+`;
+
+function styleInstruction(){
+  const s=codeMode?'coding':getSettings().style;
+  let style='Be a helpful, accurate general-purpose AI assistant. Explain things clearly and naturally.';
+  if(s==='concise')style='Be concise. Give the useful answer directly and avoid unnecessary explanation.';
+  if(s==='detailed')style='Give detailed, well-structured explanations with examples when useful.';
+  if(s==='coding')style=`Act as a practical coding assistant and mobile-first web builder. Give complete, working code when code is requested and explain important changes briefly. When the user asks for a webpage or app, prefer a single self-contained HTML file with embedded CSS and JavaScript so it can be previewed directly. Put code inside fenced code blocks with the correct language label.
+
+For every webpage/app intended for this Mini ChatGPT preview:
+- This is a professional app builder, not a visual mockup. Every interactive control you create must actually work.
+- The final HTML must contain its essential CSS and JavaScript inline. Never depend on Tailwind/Bootstrap/CDN CSS, external JS libraries, remote fonts, or external icon packages for core appearance or behavior.
+
+- V3.1 quality bar: generate a finished-looking interface, not a raw HTML prototype. Always apply an intentional design system before writing the page markup.
+- Do not use default browser styling for visible UI controls. If a button, link, input, select, card or navigation element is visible, style it intentionally.
+- Prefer responsive components and fluid sizing (min(), max(), clamp(), percentages, Grid/Flexbox) over fixed pixel widths.
+
+- Use a cohesive, intentional color palette appropriate to the project. Do not default to plain black-and-white unless the user explicitly requests it.
+- Use polished visual hierarchy, cards, spacing, typography, hover/active/focus states, and subtle gradients or shadows where appropriate.
+- For dashboards, create clear sections and visually distinct primary actions without overcrowding the mobile screen.
+- For every visible button or navigation item, implement its action. Do not include fake controls that only look clickable.
+- For forms and modals, implement open/close, validation, save/submit, cancel, and visible state updates as appropriate.
+- For transaction/finance apps, saving a record must update visible totals and lists immediately in the current session.
+- For tabs/navigation, tapping a tab must switch the visible section or state.
+- For menus/dropdowns, tapping the trigger must open/close the menu and tapping an item must perform the intended action.
+- Avoid placeholder actions such as alert('Coming soon') unless the user explicitly asks for a placeholder.
+- Keep generated projects self-contained and functional in the sandbox preview without requiring a server or external API for basic UI interactions.
+
+- Preview compatibility is mandatory: basic menus, dropdowns, tabs, modals, forms, cart actions, filters, accordions, search, and buttons must work without a server.
+- Do not use placeholder external domains or fake navigation URLs for normal UI controls. Prefer local section IDs, buttons, or JavaScript state changes.
+- Do not use external frameworks, module imports, or CDN JavaScript for core interactions unless the user explicitly requests them. Put core interaction JavaScript directly in the returned HTML.
+- Do not make ordinary navigation links leave the preview during a demo. Use section anchors or client-side state for the primary navigation.
+- If a production feature normally needs an external service (payment, email, authentication, database, maps, etc.), implement a clearly labeled demo/local behavior in Preview and mark the production integration boundary rather than breaking the preview.
+- Test the generated website as if it were running inside an iframe: no navigation away from the preview, no dependency on parent-window APIs, and no assumption that server-side routes exist.
+
+- Do not default every project to plain black-and-white styling. Unless the user explicitly asks for monochrome, choose a professional, intentional color palette with a clear primary color, secondary/accent color, readable text contrast, and subtle surfaces, borders, gradients, or shadows where appropriate.
+- Make the visual design feel finished and professional: strong hierarchy, balanced spacing, polished cards/containers, consistent button states, tasteful icons or simple illustrations when useful, and responsive mobile-first composition.
+- Use color with purpose rather than random bright colors. Keep accessibility and text contrast in mind.
+- Match the palette to the project type when possible, but follow the user's requested style when one is given.
+- For buttons, calculator keys, menus, forms, tabs, navigation, toggles, search, delete, clear, submit, and other controls, implement the required JavaScript event handling and verify the logic.
+- Prefer plain HTML/CSS/JavaScript with no external framework or CDN dependency unless the user explicitly asks for one, so the preview works immediately inside the sandbox.
+- Put all required JavaScript inside the returned self-contained HTML.
+- Never create decorative buttons that look functional but have no action.
+- For calculators specifically, wire every number/operator/control key, prevent invalid expressions, support decimal input, clear/delete, and make = actually compute the result.
+- Before returning interactive code, mentally test the main user flow (for a calculator, e.g. 7 + 5 = 12) and fix obvious runtime errors.
+
+- For navigation menus, actually test the mobile menu open/close behavior. For buttons and cards, make sure click handlers are attached and do not navigate to a dead/placeholder domain. For forms, prevent accidental page navigation in Preview.
+
+
+- IMPORTANT VISUAL QUALITY CHECK: Before returning a website, inspect the rendered design mentally on a 360–430px Android screen.
+- The website must not be a plain browser-default HTML page. Add real CSS before returning it.
+- Never allow an image, hero, table, card, or section to force the page wider than the viewport. Use max-width:100%; width:100%; height:auto where appropriate.
+- Every visible button must have intentional styling (background/accent color, readable text, border radius, spacing, hover/active state). Do not leave native gray browser buttons unless explicitly requested.
+- Use a project-appropriate color palette with at least one primary accent and one supporting color. Use white/black as text/surface colors only where appropriate, not as the entire visual system.
+- If the user asks for a premium/professional site, use polished cards, spacing, typography, sections, imagery, gradients or subtle backgrounds, and responsive navigation.
+- Before returning code, check: (1) colors are visible, (2) buttons are styled, (3) images fit the phone width, (4) no horizontal scrolling, (5) major interactions work.
+
+
+For every webpage/app intended for this Mini ChatGPT preview:
+- Design mobile-first for small Android phone screens before desktop.
+- Use responsive CSS with max-width:100%, box-sizing:border-box, and no horizontal page overflow.
+- Use CSS Grid or Flexbox for controls and keypad layouts.
+- Give related buttons consistent width/height and prevent accidental stretching.
+- Use touch-friendly buttons (normally at least about 44px tall) with sensible gaps.
+- Keep the main interface inside a responsive container that fits the viewport.
+- Use responsive typography, spacing, and media queries where useful.
+- Make forms, cards, calculators, navigation, and buttons usable with one hand on a phone.
+- Include viewport-friendly CSS and avoid fixed desktop widths.
+- Make JavaScript robust: prevent duplicate decimal points, invalid states, trailing operators, and obvious runtime errors when relevant.
+- When the user asks for a calculator, make the keypad a proper responsive grid with equal-sized keys and a clearly sized display.
+- Before presenting code, mentally check the layout for narrow screens around 320–430px wide.
+- If the user asks to improve an existing webpage, preserve its useful features and fix the requested problem instead of replacing unrelated functionality.`;
+  if(s==='trading')style='Act as a careful trading education assistant. Explain risk management and trading concepts clearly. Do not present financial outcomes as guaranteed.';
+  return style + `
+
+Important response rules:
+- Be mathematically accurate. Recheck calculations before answering.
+- When explaining calculations, use plain-text equations such as "₦1,500,000 × 0.01 = ₦15,000". Do NOT use LaTeX, $$...$$, \( ... \), or \[ ... \].
+- Do not claim that 100 consecutive 1% losses would reduce a compounding account to zero. If 1% is calculated from the current balance, explain that losses compound; if it is a fixed monetary risk, state that assumption explicitly.
+- For trading risk, distinguish the planned maximum loss at the stop-loss from the position size/lot size.
+- If the user asks for a factual calculation, show the calculation clearly and give the final number.`;
+}
+
+async function sendMessage(){
+  const text=input.value.trim();if(!text||loading)return;
+  hideError();
+  const active=getActive();
+  const isFirst=active.messages.length===0;
+  active.messages.push({role:'user',content:text,attachmentName:attachedFile?attachedFile.name:null});
+  if(isFirst)active.title=text.slice(0,40);
+  const assistant={role:'assistant',content:''};active.messages.push(assistant);
+  const fileForRequest=active.fileContext;
+  attachedFile=null;fileChip.style.display='none';fileInput.value='';
+  input.value='';input.style.height='auto';loading=true;render();saveConversations();
+
+  try{
+    const projectForRequest=getProjectCode();
+    const activeProjectInstructions=(getActive()&&getActive().projectInstructions)||projectInstructions||'';
+    const projectInstructionContext=activeProjectInstructions?`\n\nPROJECT-SPECIFIC INSTRUCTIONS:\n${activeProjectInstructions}`:'';
+    const projectContext=projectForRequest?`\n\nCURRENT PROJECT CONTEXT:\nThe user is currently building or modifying the webpage/app below. Treat it as the current working project when the user asks to modify, improve, fix, extend, redesign, or continue it. Preserve the existing design and working behavior unless the user explicitly requests a redesign. Preserve useful existing functionality unless the user explicitly asks to remove it. Do not include the full project code in a normal answer unless the user asks for code. If the user asks for a change, return a complete updated self-contained HTML file when practical.\n\n--- CURRENT PROJECT START ---\n${projectForRequest.slice(0,30000)}\n--- CURRENT PROJECT END ---`:'';
+    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      messages:active.messages.filter(m=>m!==assistant&&m.content),
+      systemInstruction:V5_BUILDER_RULES+V3_VISUAL_DESIGN_RULES+V3_ARCHITECTURE_RULES+styleInstruction()+projectContext+projectInstructionContext+(fileForRequest?'\n\nThe user attached a file. Use the following file content as context when answering:\n\n--- FILE START ---\n'+fileForRequest+'\n--- FILE END ---':'')
+    })});
+    if(!res.ok){
+      let msg='Request failed.';
+      try{const d=await res.json();msg=d.error||msg}catch{}
+      throw new Error(msg);
+    }
+    if(!res.body)throw new Error('No response stream received.');
+    const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
+    while(true){
+      const {value,done}=await reader.read();if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const events=buffer.split('\n\n');buffer=events.pop()||'';
+      for(const event of events){
+        for(const line of event.split('\n')){
+          if(!line.startsWith('data:'))continue;
+          const raw=line.slice(5).trim();if(!raw)continue;
+          try{
+            const d=JSON.parse(raw);
+            if(d.error)throw new Error(d.error);
+            if(d.text){assistant.content+=d.text;updateStreamingMessage(assistant.content)}
+          }catch(e){if(e.message&&e.message!=='Unexpected end of JSON input')throw e}
+        }
+      }
+    }
+    if(!assistant.content.trim())throw new Error('Gemini returned an empty response.');
+    rememberLatestGeneratedProject(assistant.content);
+  }catch(err){
+    if(!assistant.content)active.messages=active.messages.filter(m=>m!==assistant);
+    showError(err.message||'Failed to reach Gemini.');
+  }finally{loading=false;saveConversations();render()}
+}
+
+function updateStreamingMessage(text){
+  const rows=messagesEl.querySelectorAll('.message-row.assistant');if(!rows.length)return;
+  const row=rows[rows.length-1],bubble=row.querySelector('.bubble.assistant');if(!bubble)return;
+  bubble.innerHTML=renderMarkdown(text);enhanceCodeBlocks(bubble);messagesEl.scrollTop=messagesEl.scrollHeight;
+}
+
+async function handleFile(file){
+  if(!file)return;
+  if(file.size>500000){showError('Please keep text files under 500 KB.');return}
+  try{
+    const text=await file.text();
+    const active=getActive();
+    active.fileContext=text;
+    attachedFile=file;
+    fileName.textContent='📎 '+file.name;
+    fileChip.style.display='flex';
+    hideError();saveConversations();
+  }catch{showError('Could not read that file.')}
+}
+
+fileInput.onchange=e=>handleFile(e.target.files[0]);
+$('fileBtn').onclick=()=>fileInput.click();
+$('removeFileBtn').onclick=()=>{attachedFile=null;const c=getActive();if(c)c.fileContext=null;fileChip.style.display='none';fileInput.value='';saveConversations()};
+$('sendBtn').onclick=e=>{e.preventDefault();sendMessage();};
+
+input.addEventListener('input',()=>{sendBtn.disabled=loading||!input.value.trim();input.style.height='auto';input.style.height=Math.min(input.scrollHeight,130)+'px'});
+input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
+
+function setupVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){micBtn.onclick=()=>showError('Voice input is not supported by this browser.');return}
+  recognition=new SR();recognition.lang='en-NG';recognition.interimResults=true;recognition.continuous=false;
+  recognition.onstart=()=>{isRecording=true;micBtn.classList.add('recording');micBtn.textContent='⏹'};
+  recognition.onresult=e=>{let finalText='';for(let i=e.resultIndex;i<e.results.length;i++)finalText+=e.results[i][0].transcript;input.value=finalText;input.dispatchEvent(new Event('input'))};
+  recognition.onerror=e=>{showError('Voice input error: '+e.error)};
+  recognition.onend=()=>{isRecording=false;micBtn.classList.remove('recording');micBtn.textContent='🎤'};
+  micBtn.onclick=()=>{if(isRecording)recognition.stop();else{hideError();recognition.start()}};
+}
+setupVoice();
+
+$('historyBtn').onclick=()=>historyPanel.classList.toggle('open');
+
+$('newChatBtn').onclick=()=>{
+  const c=newConversation();conversations.unshift(c);activeId=c.id;
+  attachedFile=null;fileChip.style.display='none';fileInput.value='';
+  historyPanel.classList.remove('open');hideError();saveConversations();render();
+};
+
+$('settingsBtn').onclick=()=>{
+  $('styleSelect').value=getSettings().style||'normal';$('settingsModal').classList.add('open');
+};
+$('closeSettingsBtn').onclick=()=>$('settingsModal').classList.remove('open');
+$('settingsModal').addEventListener('click',e=>{if(e.target.id==='settingsModal')$('settingsModal').classList.remove('open')});
+$('styleSelect').onchange=e=>{const s=getSettings();s.style=e.target.value;saveSettings(s)};
+$('shareChatBtn').onclick=async()=>{await shareConversation();};
+$('downloadChatBtn').onclick=()=>{downloadConversation();};
+$('clearAllBtn').onclick=()=>{
+  if(!confirm('Delete ALL saved chats from this browser?'))return;
+  conversations=[newConversation()];activeId=conversations[0].id;saveConversations();$('settingsModal').classList.remove('open');render();
+};
+
+function addHistoryExtraActions(){
+  const active=getActive();if(!active)return;
+  /* Share/download are available from the browser prompt via long-term storage.
+     We expose them with a simple title action menu below. */
+}
+
+
+function closeToolsMenu(){
+  $('toolsMenu').classList.remove('open');
+  $('toolsToggle').classList.remove('active');
+  $('toolsToggle').setAttribute('aria-expanded','false');
+}
+function openToolsMenu(){
+  $('toolsMenu').classList.add('open');
+  $('toolsToggle').classList.add('active');
+  $('toolsToggle').setAttribute('aria-expanded','true');
+}
+$('toolsToggle').onclick=e=>{e.stopPropagation();$('toolsMenu').classList.contains('open')?closeToolsMenu():openToolsMenu()};
+document.addEventListener('click',e=>{if(!e.target.closest('.tools-wrap'))closeToolsMenu()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeToolsMenu();$('settingsModal').classList.remove('open');}});
+function setBuilderMode(mode){
+  const s=getSettings();
+  if(mode==='chat'){codeMode=false;s.style='normal';input.placeholder='Message';}
+  if(mode==='build'){codeMode=true;s.style='coding';input.placeholder='Describe the website or app you want me to build…';}
+  saveSettings(s); closeToolsMenu(); input.focus();
+}
+$('toolChatBtn').onclick=()=>setBuilderMode('chat');
+$('toolBuildBtn').onclick=()=>setBuilderMode('build');
+$('fullStackBtn').onclick=()=>{
+  closeToolsMenu();
+  setBuilderMode('build');
+  input.value='Build this as a production-ready full-stack web application. Start by understanding the product and its user flows. Decide the required frontend, backend/API, database, authentication/authorization, external APIs/services, environment variables, validation, error handling, testing, and deployment structure. Keep the project domain-neutral and do not assume it is a trading application. Make the UI professional, responsive and fully functional. If the current preview cannot execute server-side code, create the best functional preview and clearly separate the production backend/integration pieces. Return the complete implementation needed for the requested project.';
+  input.focus();
+};
+$('architectureBtn').onclick=()=>{
+  closeToolsMenu();
+  const existing=getProjectCode();
+  input.value=existing
+    ? 'Analyze the current project architecture before making more changes. Decide whether it should use a frontend, backend, database, authentication, APIs, external services, testing, and deployment. Keep what is already working. Then give me a concise architecture plan and the exact next implementation steps.'
+    : 'Design the architecture for the project I want to build. Decide whether it needs a frontend, backend, database, authentication, APIs, external services, testing, and deployment. Keep it general-purpose and use only what the project actually needs. Give me a concise architecture plan and recommended project structure.';
+  input.focus();
+  input.dispatchEvent(new Event('input'));
+};
+
+$('previewBackBtn').onclick=()=>{closePreview();};
+
+// Always provide a reliable way back to the chat/editor.
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && $('previewModal').classList.contains('open')) closePreview();
+});
+window.addEventListener('popstate',()=>{
+  if($('previewModal').classList.contains('open')) closePreview();
+});
+
+$('toolPreviewBtn').onclick=()=>{
+  closeToolsMenu();
+  const code=getProjectCode()||currentPreviewCode;
+  if(!code){showError('No project to preview yet. Build a website first.');setTimeout(hideError,2200);return;}
+  openPreview(code);
+};
+
+$('toolEditBtn').onclick=()=>{setBuilderMode('build'); if(getProjectCode()) input.value='Edit the current project. Keep all existing working features and make only the changes I describe: ';};
+$('toolReviewBtn').onclick=()=>{closeToolsMenu();input.value=getProjectCode()?'Review the current project for design quality, mobile responsiveness, accessibility, and broken functionality. Do not remove working features. Tell me what should be improved.':'Review the current chat and tell me what I should improve.';input.focus()};
+$('toolProjectBtn').onclick=()=>{closeToolsMenu();openProjectManager()};
+$('toolRepairBtn').onclick=async()=>{
+  closeToolsMenu();
+  if(!getProjectCode()){showError('No project to repair yet. Build a website first.');setTimeout(hideError,2200);return}
+  input.value='Repair the current project now. Inspect the current HTML, CSS, and JavaScript for broken buttons, event handlers, runtime errors, forms, navigation, menus, layout problems, mobile issues, and functionality regressions. Preserve every working feature. Return the complete corrected self-contained HTML.';
+  input.dispatchEvent(new Event('input'));
+  await sendMessage();
+};
+
+$('closeProjectManagerBtn').onclick=()=>$('projectManagerModal').classList.remove('open');
+$('projectManagerModal').addEventListener('click',e=>{if(e.target.id==='projectManagerModal')$('projectManagerModal').classList.remove('open')});
+$('saveProjectBtn').onclick=saveCurrentProjectToLibrary;
+$('renameProjectBtn').onclick=()=>{
+  const active=getActive();if(!active)return;
+  const name=prompt('New project name:',active.title||'New Chat');
+  if(name){active.title=name.trim();saveConversations();render();renderProjectList();showError('Project renamed.');setTimeout(hideError,1500)}
+};
+$('projectInstructionsBtn').onclick=saveProjectInstructions;
+
+$('toolExportBtn').onclick=()=>{closeToolsMenu();if(getProjectCode()){const blob=new Blob([getProjectCode()],{type:'text/html;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=((getActive()?.title||'mini-chatgpt-project').replace(/[^\w\-]+/g,'_'))+'.html';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}else{showError('No current project to export. Build a website first.');setTimeout(hideError,2200)}};
+
+// Build/Chat mode is controlled from the Tools dropdown.
+
+
+
+$('improvePreviewBtn').onclick=()=>{
+  closePreview();
+  input.value='Fix and improve the current project. Preserve every working feature. Review both the user interface and the architecture. If the project requires a backend, database, authentication, APIs, or external services, structure those parts correctly and keep all secrets server-side. Make every visible button/control actually functional, fix runtime errors, and test the main interactions before returning the updated project. For calculators, verify a basic flow such as 7 + 5 = 12. Also keep the layout mobile responsive, prevent horizontal overflow, and return the complete updated self-contained HTML so I can preview the new version.';
+  input.focus();
+};
+
+$('previewModal').addEventListener('click',e=>{
+  if(e.target.id==='previewModal')closePreview();
+});
+
+function showPreviewVersion(which){
+  const code=which==='before'?previousPreviewCode:currentPreviewCode||getProjectCode();
+  if(!code){showError('No '+which+' version is available yet.');setTimeout(hideError,1800);return}
+  const doc=buildPreviewDocument(code);if(!doc)return;
+  $('previewFrame').srcdoc=doc;
+  $('previewBeforeBtn').classList.toggle('active',which==='before');
+  $('previewAfterBtn').classList.toggle('active',which!=='before');
+}
+$('previewBeforeBtn').onclick=()=>showPreviewVersion('before');
+$('previewAfterBtn').onclick=()=>showPreviewVersion('after');
+
+$('reloadPreviewBtn').onclick=()=>{
+  const code=currentPreviewCode||getProjectCode();
+  if(code)openPreview(code);
+};
+
+
+const reviewProjectBtn=document.getElementById('reviewProjectBtn');
+if(reviewProjectBtn)reviewProjectBtn.onclick=()=>{
+  const code=getProjectCode();
+  if(!code){showError('No current project to review.');return;}
+  input.value='Review the current project before I make any more changes. Check the visual design, mobile responsiveness, every button/control, forms, navigation, menus, modals, and JavaScript for errors or non-working interactions. List the problems clearly and then provide the complete corrected self-contained HTML if fixes are needed.';
+  input.focus();
+};
+
+function init(){
+  conversations=loadConversations();
+  if(!conversations.length)conversations=[newConversation()];
+  activeId=conversations[0].id;
+  const s=getSettings();$('styleSelect').value=s.style||'normal';
+  codeMode=s.style==='coding';input.placeholder=codeMode?'Describe what you want me to build…':'Message';
+  render();
+}
+init();
+</script>
+</body>
+</html>
