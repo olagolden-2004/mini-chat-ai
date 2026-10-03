@@ -26,21 +26,11 @@ export default async function handler(req, res) {
      * ---------------------------------------------------------
      * REQUEST SAFETY LIMITS
      * ---------------------------------------------------------
-     *
-     * The Mini ChatGPT can work with large code files, but
-     * sending the entire conversation repeatedly can consume
-     * Gemini quota very quickly.
      */
 
     const MAX_MESSAGES = 12;
     const MAX_MESSAGE_CHARS = 30000;
     const MAX_TOTAL_CHARS = 90000;
-
-    /*
-     * Keep only the most recent messages.
-     * This prevents an ever-growing conversation from being
-     * sent to Gemini on every request.
-     */
 
     const recentMessages = messages
       .filter(
@@ -67,7 +57,7 @@ export default async function handler(req, res) {
     }));
 
     /*
-     * Make sure total request size does not become excessive.
+     * Limit total request size.
      */
 
     let totalChars = 0;
@@ -130,28 +120,55 @@ export default async function handler(req, res) {
     }
 
     /*
-     * Gemini request.
+     * ---------------------------------------------------------
+     * GEMINI REQUEST
+     * ---------------------------------------------------------
      */
 
-    const response = await fetch(
+    const modelUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=' +
-        encodeURIComponent(apiKey),
-      {
+      encodeURIComponent(apiKey);
+
+    async function callGemini(requestBody) {
+      const response = await fetch(modelUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(body)
+        body: JSON.stringify(requestBody)
+      });
+
+      const responseText = await response.text();
+
+      let data;
+
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        return {
+          response,
+          data: null,
+          invalidJson: true
+        };
       }
-    );
 
-    const responseText = await response.text();
+      return {
+        response,
+        data,
+        invalidJson: false
+      };
+    }
 
-    let data;
+    /*
+     * First Gemini request.
+     */
 
-    try {
-      data = JSON.parse(responseText);
-    } catch {
+    let result = await callGemini(body);
+
+    let response = result.response;
+    let data = result.data;
+
+    if (result.invalidJson) {
       return res.status(502).json({
         error: 'Gemini returned an invalid response.'
       });
@@ -193,12 +210,22 @@ export default async function handler(req, res) {
      * ---------------------------------------------------------
      */
 
-    const parts =
+    let parts =
       data?.candidates?.[0]?.content?.parts || [];
 
-    const text = parts
+    let text = parts
       .map((part) => part?.text || '')
       .join('');
+
+    /*
+     * ---------------------------------------------------------
+     * RECITATION HANDLING
+     * ---------------------------------------------------------
+     *
+     * Gemini can sometimes finish with RECITATION without
+     * returning text. Retry exactly once with an instruction
+     * asking for an original response.
+     */
 
     if (!text.trim()) {
       const finishReason =
@@ -207,19 +234,88 @@ export default async function handler(req, res) {
       const blockReason =
         data?.promptFeedback?.blockReason;
 
-      let message = 'Gemini returned no text.';
+      if (finishReason === 'RECITATION') {
+        const retryBody = JSON.parse(
+          JSON.stringify(body)
+        );
 
-      if (blockReason) {
-        message += ` Prompt blocked: ${blockReason}.`;
+        const originalInstruction =
+          typeof retryBody.systemInstruction?.parts?.[0]?.text ===
+          'string'
+            ? retryBody.systemInstruction.parts[0].text
+            : '';
+
+        retryBody.systemInstruction = {
+          parts: [
+            {
+              text:
+                originalInstruction +
+                '\n\nIMPORTANT RETRY RULE: Return an original response generated for this user request. Do not reproduce, quote, or continue any source text, copyrighted text, webpage text, code from an identified source, or other material verbatim. If the request contains source material, transform it and respond in your own words.'
+            }
+          ]
+        };
+
+        /*
+         * Retry only once.
+         */
+
+        const retryResult =
+          await callGemini(retryBody);
+
+        if (!retryResult.invalidJson) {
+          response = retryResult.response;
+          data = retryResult.data;
+
+          if (!response.ok) {
+            const retryMessage =
+              data?.error?.message ||
+              'Gemini retry request failed.';
+
+            return res.status(response.status).json({
+              error: retryMessage
+            });
+          }
+
+          const retryParts =
+            data?.candidates?.[0]?.content?.parts || [];
+
+          const retryText = retryParts
+            .map((part) => part?.text || '')
+            .join('');
+
+          if (retryText.trim()) {
+            text = retryText;
+          }
+        }
       }
 
-      if (finishReason) {
-        message += ` Finish reason: ${finishReason}.`;
-      }
+      /*
+       * If retry also failed.
+       */
 
-      return res.status(502).json({
-        error: message
-      });
+      if (!text.trim()) {
+        let message =
+          'Gemini returned no text.';
+
+        if (blockReason) {
+          message +=
+            ` Prompt blocked: ${blockReason}.`;
+        }
+
+        if (finishReason === 'RECITATION') {
+          message +=
+            ' Gemini stopped the response because it detected possible source-text reproduction. Please rephrase the request and try again.';
+        } else if (finishReason) {
+          message +=
+            ` Finish reason: ${finishReason}.`;
+        }
+
+        return res.status(502).json({
+          error: message,
+          finishReason:
+            finishReason || null
+        });
+      }
     }
 
     /*
@@ -250,11 +346,19 @@ export default async function handler(req, res) {
       'no'
     );
 
+    /*
+     * Send text.
+     */
+
     res.write(
       `data: ${JSON.stringify({
         text
       })}\n\n`
     );
+
+    /*
+     * Tell frontend we're finished.
+     */
 
     res.write(
       `data: ${JSON.stringify({
@@ -288,4 +392,4 @@ export default async function handler(req, res) {
 
     res.end();
   }
-  }
+      }
