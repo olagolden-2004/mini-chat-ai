@@ -86,7 +86,9 @@ export default async function handler(req, res) {
     }
 
     /*
-     * Convert to Gemini format.
+     * ---------------------------------------------------------
+     * CONVERT TO GEMINI FORMAT
+     * ---------------------------------------------------------
      */
 
     const contents = safeMessages.map((m) => ({
@@ -103,7 +105,9 @@ export default async function handler(req, res) {
     };
 
     /*
-     * System instruction.
+     * ---------------------------------------------------------
+     * SYSTEM INSTRUCTION
+     * ---------------------------------------------------------
      */
 
     if (
@@ -160,13 +164,110 @@ export default async function handler(req, res) {
     }
 
     /*
-     * First Gemini request.
+     * ---------------------------------------------------------
+     * DETECT TEMPORARY HIGH-DEMAND / OVERLOAD ERRORS
+     * ---------------------------------------------------------
      */
 
-    let result = await callGemini(body);
+    function isTemporaryAvailabilityError(response, data) {
+      const message = String(
+        data?.error?.message || ''
+      ).toLowerCase();
+
+      if (response.status === 503) {
+        return true;
+      }
+
+      if (response.status === 429) {
+        return (
+          message.includes('high demand') ||
+          message.includes('overloaded') ||
+          message.includes('temporarily') ||
+          message.includes('try again later')
+        );
+      }
+
+      return (
+        message.includes('high demand') ||
+        message.includes('model is currently experiencing') ||
+        message.includes('temporarily unavailable')
+      );
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * WAIT FUNCTION
+     * ---------------------------------------------------------
+     */
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * AUTOMATIC RETRY
+     *
+     * Initial request
+     * ↓
+     * Wait 1.2 seconds → retry
+     * ↓
+     * Wait 3 seconds → retry
+     *
+     * Only temporary availability errors are retried.
+     * ---------------------------------------------------------
+     */
+
+    async function callGeminiWithRetry(requestBody) {
+      const delays = [1200, 3000];
+
+      let lastResult = null;
+
+      for (
+        let attempt = 0;
+        attempt <= delays.length;
+        attempt++
+      ) {
+        if (attempt > 0) {
+          await sleep(delays[attempt - 1]);
+        }
+
+        const result = await callGemini(requestBody);
+
+        lastResult = result;
+
+        if (result.invalidJson) {
+          return result;
+        }
+
+        if (
+          result.response.ok ||
+          !isTemporaryAvailabilityError(
+            result.response,
+            result.data
+          )
+        ) {
+          return result;
+        }
+      }
+
+      return lastResult;
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * FIRST GEMINI REQUEST
+     * ---------------------------------------------------------
+     */
+
+    let result = await callGeminiWithRetry(body);
 
     let response = result.response;
     let data = result.data;
+
+    /*
+     * Invalid response from Gemini.
+     */
 
     if (result.invalidJson) {
       return res.status(502).json({
@@ -186,27 +287,52 @@ export default async function handler(req, res) {
         'Gemini API request failed.';
 
       /*
-       * Quota / rate limit.
+       * Temporary high-demand / overloaded model.
+       */
+
+      if (
+        isTemporaryAvailabilityError(
+          response,
+          data
+        )
+      ) {
+        return res.status(503).json({
+          error:
+            'Gemini is temporarily experiencing high demand. ' +
+            'Mini ChatGPT tried automatically, but the model is still busy. ' +
+            'Please try again in a few seconds.',
+          details: geminiMessage,
+          retryable: true
+        });
+      }
+
+      /*
+       * Actual quota problem.
        */
 
       if (response.status === 429) {
         return res.status(429).json({
           error:
             'Gemini quota has been exceeded. ' +
-            'The request was not retried automatically. ' +
             'Please wait for the quota to reset or use a Gemini API project/plan with available quota.',
-          details: geminiMessage
+          details: geminiMessage,
+          retryable: false
         });
       }
 
+      /*
+       * Other Gemini errors.
+       */
+
       return res.status(response.status).json({
-        error: geminiMessage
+        error: geminiMessage,
+        retryable: false
       });
     }
 
     /*
      * ---------------------------------------------------------
-     * EXTRACT RESPONSE
+     * EXTRACT GEMINI RESPONSE
      * ---------------------------------------------------------
      */
 
@@ -223,8 +349,11 @@ export default async function handler(req, res) {
      * ---------------------------------------------------------
      *
      * Gemini can sometimes finish with RECITATION without
-     * returning text. Retry exactly once with an instruction
-     * asking for an original response.
+     * returning usable text.
+     *
+     * We retry once with a stronger instruction to produce
+     * an original response.
+     * ---------------------------------------------------------
      */
 
     if (!text.trim()) {
@@ -233,6 +362,10 @@ export default async function handler(req, res) {
 
       const blockReason =
         data?.promptFeedback?.blockReason;
+
+      /*
+       * RECITATION retry.
+       */
 
       if (finishReason === 'RECITATION') {
         const retryBody = JSON.parse(
@@ -256,7 +389,7 @@ export default async function handler(req, res) {
         };
 
         /*
-         * Retry only once.
+         * Retry exactly once.
          */
 
         const retryResult =
@@ -265,6 +398,10 @@ export default async function handler(req, res) {
         if (!retryResult.invalidJson) {
           response = retryResult.response;
           data = retryResult.data;
+
+          /*
+           * Retry itself returned an error.
+           */
 
           if (!response.ok) {
             const retryMessage =
@@ -275,6 +412,10 @@ export default async function handler(req, res) {
               error: retryMessage
             });
           }
+
+          /*
+           * Extract retry response.
+           */
 
           const retryParts =
             data?.candidates?.[0]?.content?.parts || [];
@@ -290,7 +431,9 @@ export default async function handler(req, res) {
       }
 
       /*
-       * If retry also failed.
+       * -------------------------------------------------------
+       * IF RECITATION RETRY ALSO FAILED
+       * -------------------------------------------------------
        */
 
       if (!text.trim()) {
@@ -320,7 +463,7 @@ export default async function handler(req, res) {
 
     /*
      * ---------------------------------------------------------
-     * STREAM RESPONSE
+     * SEND RESPONSE TO MINI CHATGPT
      * ---------------------------------------------------------
      */
 
@@ -347,7 +490,7 @@ export default async function handler(req, res) {
     );
 
     /*
-     * Send text.
+     * Send generated text.
      */
 
     res.write(
@@ -357,7 +500,7 @@ export default async function handler(req, res) {
     );
 
     /*
-     * Tell frontend we're finished.
+     * Tell frontend generation is finished.
      */
 
     res.write(
@@ -374,6 +517,10 @@ export default async function handler(req, res) {
       error
     );
 
+    /*
+     * Normal server error.
+     */
+
     if (!res.headersSent) {
       return res.status(500).json({
         error:
@@ -381,6 +528,11 @@ export default async function handler(req, res) {
           'Server error'
       });
     }
+
+    /*
+     * If headers were already sent, send the error
+     * through the existing stream.
+     */
 
     res.write(
       `data: ${JSON.stringify({
@@ -392,4 +544,4 @@ export default async function handler(req, res) {
 
     res.end();
   }
-      }
+    }
